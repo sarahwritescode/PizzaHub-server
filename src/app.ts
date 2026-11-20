@@ -26,3 +26,4 @@ app.use(express.urlencoded({ extended: true }));
 // Health check
 app.use("/api/health", healthRoutes);
 
+export { app };
