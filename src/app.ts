@@ -4,7 +4,8 @@ import helmet from "helmet";
 
 import { env } from "./config/env.js";
 import healthRoutes from "./routes/health.routes.js";
-
+import notFound from "./middleware/notFound.js";
+import errorHandler from "./middleware/errorHandler.js";
 
 const app = express();
 
@@ -26,4 +27,10 @@ app.use(express.urlencoded({ extended: true }));
 // Health check
 app.use("/api/health", healthRoutes);
 
-export { app };
+// 404 handler
+app.use(notFound);
+
+// Global error handler
+app.use(errorHandler);
+
+export default app;
