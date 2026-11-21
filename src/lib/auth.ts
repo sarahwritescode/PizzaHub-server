@@ -1,12 +1,39 @@
-
-
-
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "@better-auth/mongo-adapter";
 import { createAuthMiddleware, APIError } from "better-auth/api";
 
 import { client } from "../config/db.js";
 import { env } from "../config/env.js";
+
+const isProduction = env.NODE_ENV === "production";
+
+// Roles anyone may pick through the public API. "admin" is deliberately
+// missing: admins are created only by the seed script (npm run seed:admin).
+const PUBLIC_ROLES = ["customer", "vendor"] as const;
+
+const isPublicRole = (role: unknown): boolean =>
+  typeof role === "string" && (PUBLIC_ROLES as readonly string[]).includes(role);
+
+// Password rule: min length is enforced by better-auth (minPasswordLength),
+// this adds one uppercase + one lowercase letter.
+const assertPasswordStrength = (password: unknown) => {
+  if (typeof password !== "string") return;
+
+  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password)) {
+    throw new APIError("BAD_REQUEST", {
+      message:
+        "Password must contain at least one uppercase and one lowercase letter.",
+    });
+  }
+};
+
+// Endpoint path -> name of the body field that carries the new password.
+const PASSWORD_FIELD_BY_PATH: Record<string, string> = {
+  "/sign-up/email": "password",
+  "/change-password": "newPassword",
+  "/reset-password": "newPassword",
+  "/set-password": "newPassword",
+};
 
 export const auth = betterAuth({
   appName: "PizzaHub",
@@ -21,16 +48,28 @@ export const auth = betterAuth({
 
   trustedOrigins: [env.CLIENT_URL],
 
+  // Cross-domain cookies in production (frontend and API on different domains).
+  // `sameSite: "none"` requires `secure: true`, which only works over HTTPS,
+  // so local http://localhost development keeps better-auth's defaults.
+  advanced: {
+    defaultCookieAttributes: isProduction
+      ? { sameSite: "none", secure: true }
+      : {},
+  },
+
   // User information and custom fields
   user: {
     modelName: "users",
 
     additionalFields: {
+      // "admin" is part of the type, but is never accepted from the public API
+      // (see hooks.before and databaseHooks.user below).
       role: {
-        type: ["customer", "vendor"],
+        type: ["admin", "customer", "vendor"],
         required: false,
         defaultValue: "customer",
         input: true,
+        returned: true,
       },
 
       isBlocked: {
@@ -38,6 +77,7 @@ export const auth = betterAuth({
         required: false,
         defaultValue: false,
         input: false,
+        returned: true,
       },
 
       businessName: {
@@ -68,25 +108,93 @@ export const auth = betterAuth({
     maxPasswordLength: 128,
   },
 
-  // Password validation
+  // Google login. New Google users get the default role ("customer").
+  socialProviders: {
+    google: {
+      clientId: env.GOOGLE_CLIENT_ID,
+      clientSecret: env.GOOGLE_CLIENT_SECRET,
+    },
+  },
+
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
-      if (ctx.path === "/sign-up/email") {
-        const password = ctx.body?.password;
+      const body = ctx.body as Record<string, unknown> | undefined;
 
-        if (typeof password === "string") {
-          const hasUppercase = /[A-Z]/.test(password);
-          const hasLowercase = /[a-z]/.test(password);
-
-          if (!hasUppercase || !hasLowercase) {
-            throw new APIError("BAD_REQUEST", {
-              message:
-                "Password must contain at least one uppercase and one lowercase letter.",
-            });
-          }
+      // 1) Nobody can become admin (or any unknown role) through the API.
+      if (ctx.path === "/sign-up/email" || ctx.path === "/update-user") {
+        if (body?.role !== undefined && !isPublicRole(body.role)) {
+          throw new APIError("BAD_REQUEST", {
+            message: 'Role must be either "customer" or "vendor".',
+          });
         }
       }
+
+      // Google sign-up can carry extra user fields in `additionalData`.
+      if (ctx.path === "/sign-in/social") {
+        const additionalData = body?.additionalData as
+          | Record<string, unknown>
+          | undefined;
+
+        if (
+          additionalData?.role !== undefined &&
+          !isPublicRole(additionalData.role)
+        ) {
+          throw new APIError("BAD_REQUEST", {
+            message: 'Role must be either "customer" or "vendor".',
+          });
+        }
+      }
+
+      // 2) Password rules on every endpoint that sets a password.
+      const passwordField = PASSWORD_FIELD_BY_PATH[ctx.path];
+
+      if (passwordField) {
+        assertPasswordStrength(body?.[passwordField]);
+      }
     }),
+  },
+
+  databaseHooks: {
+    user: {
+      // Safety net for every way a user can be created (email, Google, ...):
+      // an unknown or "admin" role silently falls back to "customer".
+      create: {
+        before: async (user) => {
+          if (user.role !== undefined && !isPublicRole(user.role)) {
+            return { data: { ...user, role: "customer" } };
+          }
+        },
+      },
+
+      // Nobody can be promoted to admin through an update either.
+      update: {
+        before: async (user) => {
+          if (user.role !== undefined && !isPublicRole(user.role)) {
+            throw new APIError("BAD_REQUEST", {
+              message: 'Role must be either "customer" or "vendor".',
+            });
+          }
+        },
+      },
+    },
+
+    session: {
+      // Runs for email sign-in and for the Google callback: blocked users
+      // never get a session.
+      create: {
+        before: async (session, ctx) => {
+          const user = await ctx?.context.internalAdapter.findUserById(
+            session.userId
+          );
+
+          if (user && (user as { isBlocked?: boolean }).isBlocked) {
+            throw new APIError("FORBIDDEN", {
+              message: "Your account has been blocked.",
+            });
+          }
+        },
+      },
+    },
   },
 });
 
