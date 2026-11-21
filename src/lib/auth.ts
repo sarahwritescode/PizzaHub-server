@@ -189,9 +189,16 @@ export const auth = betterAuth({
       // an unknown or "admin" role silently falls back to "customer".
       create: {
         before: async (user) => {
-          if (user.role !== undefined && !isPublicRole(user.role)) {
-            return { data: { ...user, role: "customer" } };
-          }
+          return {
+            data: {
+              ...user,
+              // Stored as null (not missing) until the vendor subscribes.
+              subscriptionExpiresAt: user.subscriptionExpiresAt ?? null,
+              ...(user.role !== undefined && !isPublicRole(user.role)
+                ? { role: "customer" }
+                : {}),
+            },
+          };
         },
       },
 
