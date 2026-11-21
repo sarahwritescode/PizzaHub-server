@@ -10,6 +10,7 @@ import { env } from "./config/env.js";
 import { auth } from "./lib/auth.js";
 
 import healthRoutes from "./routes/health.routes.js";
+import testRoutes from "./routes/test.routes.js";
 import notFound from "./middleware/notFound.js";
 import errorHandler from "./middleware/errorHandler.js";
 
@@ -37,6 +38,9 @@ app.use(express.urlencoded({ extended: true }));
 
 // Health check
 app.use("/api/health", healthRoutes);
+
+// Auth / role test endpoints
+app.use("/api/test", testRoutes);
 
 // 404 handler
 app.use(notFound);

@@ -14,6 +14,12 @@ const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32),
   BETTER_AUTH_URL: z.string().url(),
 
+  // Lifetime of the access JWT issued by GET /api/auth/token (e.g. 15m, 1h).
+  JWT_EXPIRES_IN: z
+    .string()
+    .regex(/^\d+[smhd]$/, 'Use a number plus s, m, h or d (e.g. "15m")')
+    .default("15m"),
+
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
 });

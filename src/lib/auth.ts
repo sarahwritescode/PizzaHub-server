@@ -1,11 +1,18 @@
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "@better-auth/mongo-adapter";
 import { createAuthMiddleware, APIError } from "better-auth/api";
+import { jwt } from "better-auth/plugins";
 
 import { client } from "../config/db.js";
 import { env } from "../config/env.js";
 
 const isProduction = env.NODE_ENV === "production";
+
+// JWT settings shared by the signer (Better Auth jwt plugin, below) and the
+// verifier (src/lib/jwt.ts), so the two can never drift apart.
+export const JWT_ISSUER = env.BETTER_AUTH_URL;
+export const JWT_AUDIENCE = env.BETTER_AUTH_URL;
+export const JWT_ALG = "EdDSA" as const;
 
 // Roles anyone may pick through the public API. "admin" is deliberately
 // missing: admins are created only by the seed script (npm run seed:admin).
@@ -115,6 +122,28 @@ export const auth = betterAuth({
       clientSecret: env.GOOGLE_CLIENT_SECRET,
     },
   },
+
+  // Access JWTs for the Express API.
+  //  - GET /api/auth/token  (needs a signed-in session) returns a short-lived JWT
+  //  - GET /api/auth/jwks   publishes the public keys used to verify it
+  // The private signing keys live encrypted (with BETTER_AUTH_SECRET) in the
+  // `jwks` collection. The Express side verifies the signature in src/lib/jwt.ts.
+  plugins: [
+    jwt({
+      jwks: {
+        keyPairConfig: { alg: JWT_ALG, crv: "Ed25519" },
+      },
+      jwt: {
+        issuer: JWT_ISSUER,
+        audience: JWT_AUDIENCE,
+        expirationTime: env.JWT_EXPIRES_IN,
+        // Keep the token small: `sub` (user id, added by Better Auth) is the only
+        // thing the server relies on. Role and isBlocked are never read from the
+        // token, they are loaded fresh from the database on every request.
+        definePayload: ({ user }) => ({ email: user.email }),
+      },
+    }),
+  ],
 
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
