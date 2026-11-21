@@ -1,0 +1,676 @@
+{
+  "info": {
+    "name": "PizzaHub - Public Menu API tests",
+    "description": "See docs/MENU_API_TESTING.md. Needs some APPROVED menu items in the database (see 'Test data' there). No login is required for any request. Run top to bottom: request 1 stores an item id used by request 10.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000"
+    },
+    {
+      "key": "itemId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. GET /api/menu-items",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 and success=true\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().success).to.eql(true); });",
+              "pm.test(\"data is an array + pagination block exists\", () => { const b = pm.response.json(); pm.expect(b.data).to.be.an(\"array\"); pm.expect(b.pagination).to.have.all.keys(\"page\",\"limit\",\"totalItems\",\"totalPages\",\"hasNextPage\",\"hasPreviousPage\"); });",
+              "pm.test(\"no vendorId / status in any item\", () => { pm.response.json().data.forEach(i => { pm.expect(i).to.not.have.property(\"vendorId\"); pm.expect(i).to.not.have.property(\"status\"); }); });",
+              "pm.test(\"saves the first item id for request 10\", () => { const d = pm.response.json().data; pm.expect(d.length, \"need at least one approved item in the DB\").to.be.above(0); pm.collectionVariables.set(\"itemId\", d[0]._id); });",
+              "pm.test(\"defaults: page 1, limit 12\", () => { const p = pm.response.json().pagination; pm.expect(p.page).to.eql(1); pm.expect(p.limit).to.eql(12); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/menu-items",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "menu-items"
+          ],
+          "query": []
+        }
+      }
+    },
+    {
+      "name": "2. GET /api/menu-items?page=1&limit=12",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 and success=true\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().success).to.eql(true); });",
+              "pm.test(\"data is an array + pagination block exists\", () => { const b = pm.response.json(); pm.expect(b.data).to.be.an(\"array\"); pm.expect(b.pagination).to.have.all.keys(\"page\",\"limit\",\"totalItems\",\"totalPages\",\"hasNextPage\",\"hasPreviousPage\"); });",
+              "pm.test(\"no vendorId / status in any item\", () => { pm.response.json().data.forEach(i => { pm.expect(i).to.not.have.property(\"vendorId\"); pm.expect(i).to.not.have.property(\"status\"); }); });",
+              "pm.test(\"at most 12 items\", () => pm.expect(pm.response.json().data.length).to.be.at.most(12));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/menu-items?page=1&limit=12",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "menu-items"
+          ],
+          "query": [
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "12"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "3. GET /api/menu-items?search=pizza",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 and success=true\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().success).to.eql(true); });",
+              "pm.test(\"data is an array + pagination block exists\", () => { const b = pm.response.json(); pm.expect(b.data).to.be.an(\"array\"); pm.expect(b.pagination).to.have.all.keys(\"page\",\"limit\",\"totalItems\",\"totalPages\",\"hasNextPage\",\"hasPreviousPage\"); });",
+              "pm.test(\"no vendorId / status in any item\", () => { pm.response.json().data.forEach(i => { pm.expect(i).to.not.have.property(\"vendorId\"); pm.expect(i).to.not.have.property(\"status\"); }); });",
+              "pm.test(\"every item mentions pizza in name, description, category or location\", () => pm.response.json().data.forEach(i => pm.expect((i => [i.itemName, i.description, i.category, i.location].join(\" \").toLowerCase())(i)).to.include(\"pizza\")));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/menu-items?search=pizza",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "menu-items"
+          ],
+          "query": [
+            {
+              "key": "search",
+              "value": "pizza"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "4. GET /api/menu-items?category=chicken",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 and success=true\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().success).to.eql(true); });",
+              "pm.test(\"data is an array + pagination block exists\", () => { const b = pm.response.json(); pm.expect(b.data).to.be.an(\"array\"); pm.expect(b.pagination).to.have.all.keys(\"page\",\"limit\",\"totalItems\",\"totalPages\",\"hasNextPage\",\"hasPreviousPage\"); });",
+              "pm.test(\"no vendorId / status in any item\", () => { pm.response.json().data.forEach(i => { pm.expect(i).to.not.have.property(\"vendorId\"); pm.expect(i).to.not.have.property(\"status\"); }); });",
+              "pm.test(\"every item is in category chicken (any case)\", () => pm.response.json().data.forEach(i => pm.expect(i.category.toLowerCase()).to.eql(\"chicken\")));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/menu-items?category=chicken",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "menu-items"
+          ],
+          "query": [
+            {
+              "key": "category",
+              "value": "chicken"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "5. GET /api/menu-items?location=dhaka",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 and success=true\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().success).to.eql(true); });",
+              "pm.test(\"data is an array + pagination block exists\", () => { const b = pm.response.json(); pm.expect(b.data).to.be.an(\"array\"); pm.expect(b.pagination).to.have.all.keys(\"page\",\"limit\",\"totalItems\",\"totalPages\",\"hasNextPage\",\"hasPreviousPage\"); });",
+              "pm.test(\"no vendorId / status in any item\", () => { pm.response.json().data.forEach(i => { pm.expect(i).to.not.have.property(\"vendorId\"); pm.expect(i).to.not.have.property(\"status\"); }); });",
+              "pm.test(\"every location contains dhaka (any case)\", () => pm.response.json().data.forEach(i => pm.expect(i.location.toLowerCase()).to.include(\"dhaka\")));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/menu-items?location=dhaka",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "menu-items"
+          ],
+          "query": [
+            {
+              "key": "location",
+              "value": "dhaka"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "6. GET /api/menu-items?sortBy=price&order=asc",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 and success=true\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().success).to.eql(true); });",
+              "pm.test(\"data is an array + pagination block exists\", () => { const b = pm.response.json(); pm.expect(b.data).to.be.an(\"array\"); pm.expect(b.pagination).to.have.all.keys(\"page\",\"limit\",\"totalItems\",\"totalPages\",\"hasNextPage\",\"hasPreviousPage\"); });",
+              "pm.test(\"no vendorId / status in any item\", () => { pm.response.json().data.forEach(i => { pm.expect(i).to.not.have.property(\"vendorId\"); pm.expect(i).to.not.have.property(\"status\"); }); });",
+              "pm.test(\"sorted by price asc\", () => { const v = pm.response.json().data.map(i => i.price); for (let i = 1; i < v.length; i++) pm.expect(v[i-1] <= v[i]).to.eql(true); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/menu-items?sortBy=price&order=asc",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "menu-items"
+          ],
+          "query": [
+            {
+              "key": "sortBy",
+              "value": "price"
+            },
+            {
+              "key": "order",
+              "value": "asc"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "7. GET /api/menu-items?sortBy=price&order=desc",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 and success=true\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().success).to.eql(true); });",
+              "pm.test(\"data is an array + pagination block exists\", () => { const b = pm.response.json(); pm.expect(b.data).to.be.an(\"array\"); pm.expect(b.pagination).to.have.all.keys(\"page\",\"limit\",\"totalItems\",\"totalPages\",\"hasNextPage\",\"hasPreviousPage\"); });",
+              "pm.test(\"no vendorId / status in any item\", () => { pm.response.json().data.forEach(i => { pm.expect(i).to.not.have.property(\"vendorId\"); pm.expect(i).to.not.have.property(\"status\"); }); });",
+              "pm.test(\"sorted by price desc\", () => { const v = pm.response.json().data.map(i => i.price); for (let i = 1; i < v.length; i++) pm.expect(v[i-1] >= v[i]).to.eql(true); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/menu-items?sortBy=price&order=desc",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "menu-items"
+          ],
+          "query": [
+            {
+              "key": "sortBy",
+              "value": "price"
+            },
+            {
+              "key": "order",
+              "value": "desc"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "8. GET /api/menu-items?search=pizza&category=chicken&sortBy=price&order=asc&page=1&limit=12",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 and success=true\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().success).to.eql(true); });",
+              "pm.test(\"data is an array + pagination block exists\", () => { const b = pm.response.json(); pm.expect(b.data).to.be.an(\"array\"); pm.expect(b.pagination).to.have.all.keys(\"page\",\"limit\",\"totalItems\",\"totalPages\",\"hasNextPage\",\"hasPreviousPage\"); });",
+              "pm.test(\"no vendorId / status in any item\", () => { pm.response.json().data.forEach(i => { pm.expect(i).to.not.have.property(\"vendorId\"); pm.expect(i).to.not.have.property(\"status\"); }); });",
+              "pm.test(\"sorted by price asc\", () => { const v = pm.response.json().data.map(i => i.price); for (let i = 1; i < v.length; i++) pm.expect(v[i-1] <= v[i]).to.eql(true); });",
+              "pm.test(\"every item matches BOTH filters\", () => pm.response.json().data.forEach(i => { pm.expect(i.category.toLowerCase()).to.eql(\"chicken\"); pm.expect((i => [i.itemName, i.description, i.category, i.location].join(\" \").toLowerCase())(i)).to.include(\"pizza\"); }));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/menu-items?search=pizza&category=chicken&sortBy=price&order=asc&page=1&limit=12",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "menu-items"
+          ],
+          "query": [
+            {
+              "key": "search",
+              "value": "pizza"
+            },
+            {
+              "key": "category",
+              "value": "chicken"
+            },
+            {
+              "key": "sortBy",
+              "value": "price"
+            },
+            {
+              "key": "order",
+              "value": "asc"
+            },
+            {
+              "key": "page",
+              "value": "1"
+            },
+            {
+              "key": "limit",
+              "value": "12"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "9. GET /api/menu-items/INVALID_ID (expects 400)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"400 + success=false + VALIDATION_ERROR\", () => { pm.response.to.have.status(400); const b = pm.response.json(); pm.expect(b.success).to.eql(false); pm.expect(b.code).to.eql(\"VALIDATION_ERROR\"); pm.expect(b.errors).to.be.an(\"array\").that.is.not.empty; });",
+              "pm.test(\"error is about id\", () => pm.expect(pm.response.json().errors.map(e => e.field)).to.include(\"id\"));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/menu-items/INVALID_ID",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "menu-items",
+            "INVALID_ID"
+          ],
+          "query": []
+        }
+      }
+    },
+    {
+      "name": "10. GET /api/menu-items/:id (id saved by request 1)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 and success=true\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().success).to.eql(true); });",
+              "pm.test(\"same id, no pagination, no vendorId/status\", () => { const b = pm.response.json(); pm.expect(b.data._id).to.eql(pm.collectionVariables.get(\"itemId\")); pm.expect(b).to.not.have.property(\"pagination\"); pm.expect(b.data).to.not.have.property(\"vendorId\"); pm.expect(b.data).to.not.have.property(\"status\"); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/menu-items/{{itemId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "menu-items",
+            "{{itemId}}"
+          ],
+          "query": []
+        }
+      }
+    },
+    {
+      "name": "11. GET /api/categories",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 and success=true\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().success).to.eql(true); });",
+              "pm.test(\"data = [{ name, count }] with no duplicates or blanks\", () => { const d = pm.response.json().data; pm.expect(d).to.be.an(\"array\"); d.forEach(c => { pm.expect(c).to.have.all.keys(\"name\",\"count\"); pm.expect(c.name.trim()).to.not.eql(\"\"); }); const n = d.map(c => c.name.toLowerCase()); pm.expect(new Set(n).size).to.eql(n.length); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/categories",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "categories"
+          ],
+          "query": []
+        }
+      }
+    },
+    {
+      "name": "12. GET /api/menu-items/featured",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 and success=true (not treated as an :id)\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().success).to.eql(true); });",
+              "pm.test(\"max 6 items, newest first\", () => { const d = pm.response.json().data; pm.expect(d.length).to.be.at.most(6); const t = d.map(i => new Date(i.createdAt).getTime()); for (let i = 1; i < t.length; i++) pm.expect(t[i-1] >= t[i]).to.eql(true); });"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/menu-items/featured",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "menu-items",
+            "featured"
+          ],
+          "query": []
+        }
+      }
+    },
+    {
+      "name": "Extra checks",
+      "item": [
+        {
+          "name": "X1. page=0 (expects 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 + success=false + VALIDATION_ERROR\", () => { pm.response.to.have.status(400); const b = pm.response.json(); pm.expect(b.success).to.eql(false); pm.expect(b.code).to.eql(\"VALIDATION_ERROR\"); pm.expect(b.errors).to.be.an(\"array\").that.is.not.empty; });",
+                  "pm.test(\"error is about page\", () => pm.expect(pm.response.json().errors.map(e => e.field)).to.include(\"page\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/menu-items?page=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "menu-items"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "X2. limit=51 (expects 400, max is 50)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 + success=false + VALIDATION_ERROR\", () => { pm.response.to.have.status(400); const b = pm.response.json(); pm.expect(b.success).to.eql(false); pm.expect(b.code).to.eql(\"VALIDATION_ERROR\"); pm.expect(b.errors).to.be.an(\"array\").that.is.not.empty; });",
+                  "pm.test(\"error is about limit\", () => pm.expect(pm.response.json().errors.map(e => e.field)).to.include(\"limit\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/menu-items?limit=51",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "menu-items"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "51"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "X3. sortBy=name (expects 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 + success=false + VALIDATION_ERROR\", () => { pm.response.to.have.status(400); const b = pm.response.json(); pm.expect(b.success).to.eql(false); pm.expect(b.code).to.eql(\"VALIDATION_ERROR\"); pm.expect(b.errors).to.be.an(\"array\").that.is.not.empty; });",
+                  "pm.test(\"error is about sortBy\", () => pm.expect(pm.response.json().errors.map(e => e.field)).to.include(\"sortBy\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/menu-items?sortBy=name",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "menu-items"
+              ],
+              "query": [
+                {
+                  "key": "sortBy",
+                  "value": "name"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "X4. order=up (expects 400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 + success=false + VALIDATION_ERROR\", () => { pm.response.to.have.status(400); const b = pm.response.json(); pm.expect(b.success).to.eql(false); pm.expect(b.code).to.eql(\"VALIDATION_ERROR\"); pm.expect(b.errors).to.be.an(\"array\").that.is.not.empty; });",
+                  "pm.test(\"error is about order\", () => pm.expect(pm.response.json().errors.map(e => e.field)).to.include(\"order\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/menu-items?order=up",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "menu-items"
+              ],
+              "query": [
+                {
+                  "key": "order",
+                  "value": "up"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "X5. valid but unknown id (expects 404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"404 + success=false + MENU_ITEM_NOT_FOUND\", () => { pm.response.to.have.status(404); const b = pm.response.json(); pm.expect(b.success).to.eql(false); pm.expect(b.code).to.eql(\"MENU_ITEM_NOT_FOUND\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/menu-items/000000000000000000000000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "menu-items",
+                "000000000000000000000000"
+              ],
+              "query": []
+            }
+          }
+        },
+        {
+          "name": "X6. search=.* is plain text (no crash)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 and success=true (regex characters are escaped)\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().success).to.eql(true); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/menu-items?search=.*",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "menu-items"
+              ],
+              "query": [
+                {
+                  "key": "search",
+                  "value": ".*"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

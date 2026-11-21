@@ -73,7 +73,7 @@ const validTransaction = (session = `cs_test_${oid().toHexString()}`) => ({
 try {
   const db = await connectDB();
 
-  // ───────── 1. connection ─────────
+  //  1. connection 
   const ping = await db.command({ ping: 1 });
   check("1  MongoDB connection + ping", ping.ok === 1);
 

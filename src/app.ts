@@ -11,6 +11,7 @@ import { auth } from "./lib/auth.js";
 
 import healthRoutes from "./routes/health.routes.js";
 import testRoutes from "./routes/test.routes.js";
+import { categoriesRouter, menuItemsRouter } from "./routes/menu.routes.js";
 import notFound from "./middleware/notFound.js";
 import errorHandler from "./middleware/errorHandler.js";
 
@@ -41,6 +42,10 @@ app.use("/api/health", healthRoutes);
 
 // Auth / role test endpoints
 app.use("/api/test", testRoutes);
+
+// Public menu (no login required)
+app.use("/api/menu-items", menuItemsRouter);
+app.use("/api/categories", categoriesRouter);
 
 // 404 handler
 app.use(notFound);
