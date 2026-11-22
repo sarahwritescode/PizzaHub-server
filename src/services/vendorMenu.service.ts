@@ -43,7 +43,7 @@ const isActiveStatus = (status: MenuItemStatus) => ACTIVE_STATUSES.includes(stat
  * expiry date is NOT treated as unlimited: the Stripe flow always sets one,
  * so a missing date means something is wrong and the safe fallback is Free.
  */
-const hasPremium = (user: Pick<UserDoc, "subscriptionPlan" | "subscriptionExpiresAt">) =>
+export const hasPremium = (user: Pick<UserDoc, "subscriptionPlan" | "subscriptionExpiresAt">) =>
   user.subscriptionPlan === "premium" &&
   user.subscriptionExpiresAt instanceof Date &&
   user.subscriptionExpiresAt.getTime() > Date.now();

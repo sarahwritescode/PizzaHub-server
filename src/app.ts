@@ -19,6 +19,8 @@ import uploadRouter from "./routes/upload.routes.js";
 import adminMenuRouter from "./routes/adminMenu.routes.js";
 import orderRouter from "./routes/order.routes.js";
 import vendorOrderRouter from "./routes/vendorOrder.routes.js";
+import subscriptionRouter from "./routes/subscription.routes.js";
+import { stripeWebhook } from "./controllers/stripeWebhook.controller.js";
 import notFound from "./middleware/notFound.js";
 import errorHandler from "./middleware/errorHandler.js";
 
@@ -55,6 +57,11 @@ app.use(async (_req, _res, next) => {
 // Express 5 syntax
 app.all("/api/auth/*splat", toNodeHandler(auth));
 
+// Stripe webhook. Public, protected only by Stripe's signature, which is computed over the RAW body.
+// So it is mounted with express.raw() BEFORE express.json(): once the JSON parser has run, the exact
+// bytes are gone and no signature could be verified. Everything below still gets the normal parsers.
+app.post("/api/stripe/webhook", express.raw({ type: "application/json", limit: "1mb" }), stripeWebhook);
+
 // Body parsing middleware
 // Must be after Better Auth handler
 app.use(express.json({ limit: "1mb" }));
@@ -84,6 +91,9 @@ app.use("/api/orders", orderRouter);
 
 // Vendor order management: see and accept/reject orders for own items (vendor login required)
 app.use("/api/vendor/orders", vendorOrderRouter);
+
+// Vendor Premium subscription: status and Stripe Checkout (vendor login required)
+app.use("/api/vendor/subscription", subscriptionRouter);
 
 // 404 handler
 app.use(notFound);

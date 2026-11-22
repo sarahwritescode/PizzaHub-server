@@ -2,6 +2,15 @@
 import "dotenv/config";
 import { z } from "zod";
 
+/** Optional trimmed string; empty means "not set"; when set it must match `pattern`. */
+const stripeValue = (pattern: RegExp, description: string) =>
+  z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => value || undefined)
+    .refine((value) => value === undefined || pattern.test(value), `Must be ${description}`);
+
 const envSchema = z.object({
   PORT: z.coerce.number().default(5000),
   NODE_ENV: z.enum(["development", "production"]).default("development"),
@@ -68,6 +77,23 @@ const envSchema = z.object({
     .trim()
     .optional()
     .transform((value) => value || undefined),
+
+  // Stripe (vendor Premium subscription). Optional in development so the rest of the API runs
+  // without them; REQUIRED when NODE_ENV=production (checked below). An empty value counts as "not set".
+  // When set, each must look like the real thing, so a pasted wrong value fails at start-up, not at the first payment.
+  STRIPE_SECRET_KEY: stripeValue(/^(sk|rk)_(test|live)_[A-Za-z0-9]+$/, "a Stripe secret key (sk_test_... or sk_live_...)"),
+  STRIPE_WEBHOOK_SECRET: stripeValue(/^whsec_[A-Za-z0-9]+$/, "a Stripe webhook signing secret (whsec_...)"),
+  // The Price of the Premium plan, created in the Stripe Dashboard. The amount, currency and billing
+  // period are whatever that Price says: the API never decides them, and a client can never send them.
+  STRIPE_PREMIUM_PRICE_ID: stripeValue(/^price_[A-Za-z0-9]+$/, "a Stripe Price id (price_...)"),
+}).superRefine((values, ctx) => {
+  if (values.NODE_ENV !== "production") return;
+
+  for (const key of ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PREMIUM_PRICE_ID"] as const) {
+    if (!values[key]) {
+      ctx.addIssue({ code: "custom", path: [key], message: `${key} is required when NODE_ENV=production` });
+    }
+  }
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

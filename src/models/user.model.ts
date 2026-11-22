@@ -28,6 +28,16 @@ export interface UserDoc {
   subscriptionExpiresAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
+
+  // Stripe references, written ONLY by the checkout code and the verified webhook (never from a
+  // request). Optional: a user who never started a checkout has none of them. Better Auth does not
+  // know these fields, so its own endpoints never return them.
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  /** Stripe's subscription status: active, past_due, unpaid, canceled, incomplete, incomplete_expired, trialing. */
+  subscriptionStatus?: string | null;
+  /** The customer cancelled: nothing more will be charged and the subscription ends with the paid period. */
+  subscriptionCancelAtPeriodEnd?: boolean;
 }
 
 export const usersDefinition: CollectionDefinition = {
