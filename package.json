@@ -13,7 +13,8 @@
     "verify:menu": "tsx src/scripts/verifyMenuApi.ts",
     "verify:vendor": "tsx src/scripts/verifyVendorApi.ts",
     "verify:upload": "tsx src/scripts/verifyUploadApi.ts",
-    "verify:origins": "tsx src/scripts/verifyOrigins.ts"
+    "verify:origins": "tsx src/scripts/verifyOrigins.ts",
+    "verify:admin-menu": "tsx src/scripts/verifyAdminMenuApi.ts"
   },
   "keywords": [],
   "author": "",

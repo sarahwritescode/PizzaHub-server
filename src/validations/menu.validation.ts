@@ -6,7 +6,7 @@ export const DEFAULT_LIMIT = 12;
 export const MAX_LIMIT = 50;
 
 /** Optional free-text filter: trimmed, max 100 chars, an empty value means "not set". */
-const optionalText = z
+export const optionalText = z
   .string()
   .trim()
   .max(100, "Must be at most 100 characters")

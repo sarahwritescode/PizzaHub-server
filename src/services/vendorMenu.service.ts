@@ -87,7 +87,7 @@ const toVendorItem = (item: MenuItemDoc): VendorMenuItem => ({
   createdAt: item.createdAt,
 });
 
-const itemNotFound = () => new HttpError(404, "Menu item not found", "MENU_ITEM_NOT_FOUND");
+export const itemNotFound = () => new HttpError(404, "Menu item not found", "MENU_ITEM_NOT_FOUND");
 
 // ───────────────────── per-vendor lock + limit check ─────────────────────
 
@@ -322,17 +322,12 @@ export const setVendorMenuItemAvailability = (
     return { item: toVendorItem({ ...item, status: target }), changed: true };
   });
 
-/** DELETE /api/vendor/menu-items/:id */
-export const deleteVendorMenuItem = async (vendorId: ObjectId, itemId: ObjectId) => {
-  const item = await menuItemsCollection().findOne(
-    { _id: itemId, vendorId },
-    { projection: { _id: 1 } }
-  );
-
-  if (!item) throw itemNotFound();
-
-  // Orders point at the item by id. Deleting it while a customer is waiting for
-  // it would leave an order for something that no longer exists.
+/**
+ * Orders point at the item by id. Deleting it while a customer is waiting for
+ * it would leave an order for something that no longer exists. Shared with the
+ * admin delete (adminMenu.service.ts) so both apply the same rule.
+ */
+export const assertNoOpenOrders = async (itemId: ObjectId) => {
   const openOrders = await ordersCollection().countDocuments(
     { itemId, status: { $in: ["pending", "accepted"] } },
     { limit: 1 }
@@ -345,6 +340,18 @@ export const deleteVendorMenuItem = async (vendorId: ObjectId, itemId: ObjectId)
       "ITEM_HAS_OPEN_ORDERS"
     );
   }
+};
+
+/** DELETE /api/vendor/menu-items/:id */
+export const deleteVendorMenuItem = async (vendorId: ObjectId, itemId: ObjectId) => {
+  const item = await menuItemsCollection().findOne(
+    { _id: itemId, vendorId },
+    { projection: { _id: 1 } }
+  );
+
+  if (!item) throw itemNotFound();
+
+  await assertNoOpenOrders(itemId);
 
   const { deletedCount } = await menuItemsCollection().deleteOne({ _id: itemId, vendorId });
 

@@ -16,6 +16,7 @@ import testRoutes from "./routes/test.routes.js";
 import { categoriesRouter, menuItemsRouter } from "./routes/menu.routes.js";
 import vendorMenuRouter from "./routes/vendorMenu.routes.js";
 import uploadRouter from "./routes/upload.routes.js";
+import adminMenuRouter from "./routes/adminMenu.routes.js";
 import notFound from "./middleware/notFound.js";
 import errorHandler from "./middleware/errorHandler.js";
 
@@ -72,6 +73,9 @@ app.use("/api/vendor/menu-items", vendorMenuRouter);
 
 // Vendor image upload to ImgBB (vendor login required)
 app.use("/api/vendor/upload-image", uploadRouter);
+
+// Admin menu approval / rejection / moderation (admin login required)
+app.use("/api/admin/menu-items", adminMenuRouter);
 
 // 404 handler
 app.use(notFound);
