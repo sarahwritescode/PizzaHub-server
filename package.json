@@ -10,7 +10,8 @@
     "build": "tsc",
     "seed:admin": "tsx src/scripts/seedAdmin.ts",
     "verify:db": "tsx src/scripts/verifyDatabase.ts",
-    "verify:menu": "tsx src/scripts/verifyMenuApi.ts"
+    "verify:menu": "tsx src/scripts/verifyMenuApi.ts",
+    "verify:vendor": "tsx src/scripts/verifyVendorApi.ts"
   },
   "keywords": [],
   "author": "",

@@ -14,10 +14,16 @@ export const parseWith = <S extends z.ZodType>(schema: S, input: unknown): z.out
       400,
       "Validation failed",
       "VALIDATION_ERROR",
-      result.error.issues.map((issue) => ({
-        field: issue.path.join("."),
-        message: issue.message,
-      }))
+      result.error.issues.flatMap((issue) =>
+        // A strict schema reports all unknown keys in one issue with an empty
+        // path: list each key by name so the client sees which field is refused.
+        issue.code === "unrecognized_keys"
+          ? issue.keys.map((key) => ({
+              field: [...issue.path, key].join("."),
+              message: "This field is not allowed",
+            }))
+          : [{ field: issue.path.join("."), message: issue.message }]
+      )
     );
   }
 

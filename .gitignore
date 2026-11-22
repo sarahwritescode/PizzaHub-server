@@ -7,3 +7,6 @@ dist/
 coverage/
 *.log
 .DS_Store
+
+# Local-only notes for the client-side assistant
+docs/CLIENT_API_GUIDE.md

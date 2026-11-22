@@ -7,11 +7,14 @@ import helmet from "helmet";
 import { toNodeHandler } from "better-auth/node";
 
 import { env } from "./config/env.js";
+import { connectDB } from "./config/db.js";
+import { initializeDatabase } from "./config/initDatabase.js";
 import { auth } from "./lib/auth.js";
 
 import healthRoutes from "./routes/health.routes.js";
 import testRoutes from "./routes/test.routes.js";
 import { categoriesRouter, menuItemsRouter } from "./routes/menu.routes.js";
+import vendorMenuRouter from "./routes/vendorMenu.routes.js";
 import notFound from "./middleware/notFound.js";
 import errorHandler from "./middleware/errorHandler.js";
 
@@ -27,6 +30,22 @@ app.use(
     credentials: true,
   })
 );
+
+// Vercel runs this file (app.ts), not server.ts, so server.ts never gets to
+// connect the database there. Connect lazily, once per cold start; locally
+// server.ts has already connected and connectDB() just returns.
+let ready: Promise<unknown> | undefined;
+
+app.use(async (_req, _res, next) => {
+  try {
+    ready ??= connectDB().then(() => initializeDatabase());
+    await ready;
+    next();
+  } catch (error) {
+    ready = undefined; // try again on the next request
+    next(error);
+  }
+});
 
 // Better Auth handler
 // Express 5 syntax
@@ -46,6 +65,9 @@ app.use("/api/test", testRoutes);
 // Public menu (no login required)
 app.use("/api/menu-items", menuItemsRouter);
 app.use("/api/categories", categoriesRouter);
+
+// Vendor menu management (vendor login required)
+app.use("/api/vendor/menu-items", vendorMenuRouter);
 
 // 404 handler
 app.use(notFound);

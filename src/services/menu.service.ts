@@ -1,6 +1,7 @@
 import type { Filter, ObjectId, Sort } from "mongodb";
 
 import { menuItemsCollection, type MenuItemDoc } from "../models/index.js";
+import { buildPagination } from "../utils/pagination.js";
 import type { MenuItemsQuery } from "../validations/menu.validation.js";
 
 /**
@@ -30,15 +31,6 @@ export type PublicMenuItem = Pick<
   MenuItemDoc,
   "_id" | "itemName" | "category" | "description" | "price" | "location" | "images" | "createdAt"
 >;
-
-export interface Pagination {
-  page: number;
-  limit: number;
-  totalItems: number;
-  totalPages: number;
-  hasNextPage: boolean;
-  hasPreviousPage: boolean;
-}
 
 export interface CategorySummary {
   name: string;
@@ -100,18 +92,7 @@ export const listPublicMenuItems = async (query: MenuItemsQuery) => {
     collection.countDocuments(filter),
   ]);
 
-  const totalPages = Math.ceil(totalItems / limit);
-
-  const pagination: Pagination = {
-    page,
-    limit,
-    totalItems,
-    totalPages,
-    hasNextPage: page < totalPages,
-    hasPreviousPage: page > 1,
-  };
-
-  return { items, pagination };
+  return { items, pagination: buildPagination(page, limit, totalItems) };
 };
 
 /** GET /api/menu-items/:id. Returns null for a missing OR non-public item (the caller answers 404). */

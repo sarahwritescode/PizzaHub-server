@@ -14,7 +14,7 @@ const optionalText = z
   .optional();
 
 /** "12" -> 12. Rejects "0", "-1", "1.5", "abc", "" and anything above `max`. */
-const positiveInteger = (max: number) =>
+export const positiveInteger = (max: number) =>
   z
     .string()
     .regex(/^\d+$/, "Must be a positive whole number")
