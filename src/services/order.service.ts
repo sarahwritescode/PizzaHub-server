@@ -45,22 +45,30 @@ export interface CustomerOrder {
   vendor: OrderVendorInfo | null;
 }
 
+const unique = (ids: ObjectId[]) => [...new Map(ids.map((id) => [id.toHexString(), id])).values()];
+
+/** One query for the items of a whole page of orders. Also used by the vendor order API. */
+export const lookupOrderItems = async (orders: OrderDoc[]) => {
+  const itemIds = unique(orders.map((order) => order.itemId));
+
+  const items = itemIds.length
+    ? await menuItemsCollection().find({ _id: { $in: itemIds } }).project<OrderItemInfo>(ITEM_PROJECTION).toArray()
+    : [];
+
+  return new Map(items.map((item) => [item._id.toHexString(), item]));
+};
+
 /** Two queries for the whole page (items, vendors) instead of two per order. */
 const toCustomerOrders = async (orders: OrderDoc[]): Promise<CustomerOrder[]> => {
-  const unique = (ids: ObjectId[]) => [...new Map(ids.map((id) => [id.toHexString(), id])).values()];
-  const itemIds = unique(orders.map((order) => order.itemId));
   const vendorIds = unique(orders.map((order) => order.vendorId));
 
-  const [items, vendors] = await Promise.all([
-    itemIds.length
-      ? menuItemsCollection().find({ _id: { $in: itemIds } }).project<OrderItemInfo>(ITEM_PROJECTION).toArray()
-      : [],
+  const [itemById, vendors] = await Promise.all([
+    lookupOrderItems(orders),
     vendorIds.length
       ? usersCollection().find({ _id: { $in: vendorIds } }).project<OrderVendorInfo>(VENDOR_PROJECTION).toArray()
       : [],
   ]);
 
-  const itemById = new Map(items.map((item) => [item._id.toHexString(), item]));
   const vendorById = new Map(vendors.map((vendor) => [vendor._id.toHexString(), vendor]));
 
   return orders.map((order) => ({
@@ -177,32 +185,52 @@ export const getMyOrder = async (customerId: ObjectId, orderId: ObjectId) => {
   return result!;
 };
 
+/** The only moves out of "pending" an order can make, and who makes them. */
+export type PendingTarget = "cancelled" | "accepted" | "rejected";
+
 /**
- * PATCH /api/orders/:id/cancel. Only the caller's own pending order.
- * The write itself only matches while the order is still pending, so a cancel and a vendor
- * accept happening at the same moment cannot both win, and cancelling twice at once cancels once.
+ * Moves ONE order out of "pending" for its owner. Shared by the customer (cancel) and the
+ * vendor (accept, reject) so the rule and the concurrency protection exist once.
+ *
+ * `owner` is part of the filter, so someone else's order looks exactly like a missing one (404).
+ * The write only matches while the order is still pending: when a cancel, an accept and a reject
+ * of the same order arrive together, MongoDB lets exactly one of them match, the others get 409.
+ * Leaving "pending" for "cancelled" / "rejected" takes the order out of the unique active-order
+ * index (orders_active_customer_item_date_uidx), so the customer may order that day again;
+ * "accepted" stays inside it.
  */
-export const cancelMyOrder = async (customerId: ObjectId, orderId: ObjectId) => {
+export const moveOrderFromPending = async (
+  owner: { customerId: ObjectId } | { vendorId: ObjectId },
+  orderId: ObjectId,
+  target: PendingTarget
+): Promise<OrderDoc> => {
   const collection = ordersCollection();
 
   const { matchedCount } = await collection.updateOne(
-    { _id: orderId, customerId, status: "pending" },
-    { $set: { status: "cancelled" } }
+    { _id: orderId, ...owner, status: "pending" },
+    { $set: { status: target } }
   );
 
   // Either it is not the caller's / does not exist, or it was not pending. Look again to tell which.
-  const order = await collection.findOne({ _id: orderId, customerId });
+  const order = await collection.findOne({ _id: orderId, ...owner });
   if (!order) throw orderNotFound();
 
   if (matchedCount === 0) {
     throw new HttpError(
       409,
-      order.status === "cancelled"
-        ? "This order is already cancelled."
-        : `Only a pending order can be cancelled (this one is ${order.status}).`,
+      order.status === target
+        ? `This order is already ${target}.`
+        : `Only a pending order can be ${target} (this one is ${order.status}).`,
       "INVALID_STATUS_TRANSITION"
     );
   }
+
+  return order;
+};
+
+/** PATCH /api/orders/:id/cancel. Only the caller's own pending order. */
+export const cancelMyOrder = async (customerId: ObjectId, orderId: ObjectId) => {
+  const order = await moveOrderFromPending({ customerId }, orderId, "cancelled");
 
   const [result] = await toCustomerOrders([order]);
   return result!;

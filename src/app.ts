@@ -18,6 +18,7 @@ import vendorMenuRouter from "./routes/vendorMenu.routes.js";
 import uploadRouter from "./routes/upload.routes.js";
 import adminMenuRouter from "./routes/adminMenu.routes.js";
 import orderRouter from "./routes/order.routes.js";
+import vendorOrderRouter from "./routes/vendorOrder.routes.js";
 import notFound from "./middleware/notFound.js";
 import errorHandler from "./middleware/errorHandler.js";
 
@@ -80,6 +81,9 @@ app.use("/api/admin/menu-items", adminMenuRouter);
 
 // Customer orders (customer login required)
 app.use("/api/orders", orderRouter);
+
+// Vendor order management: see and accept/reject orders for own items (vendor login required)
+app.use("/api/vendor/orders", vendorOrderRouter);
 
 // 404 handler
 app.use(notFound);

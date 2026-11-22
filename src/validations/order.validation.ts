@@ -1,6 +1,7 @@
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 
+import { ORDER_STATUSES } from "../models/index.js";
 import { DEFAULT_LIMIT, MAX_LIMIT, MAX_PAGE, menuItemParamsSchema, positiveInteger } from "./menu.validation.js";
 
 /** Route params of /api/orders/:id: the same 24-hex-character ObjectId rule as the menu routes. */
@@ -43,7 +44,7 @@ export const createOrderBodySchema = z.strictObject({
     .optional(),
 });
 
-/** PATCH /api/orders/:id/cancel takes no body (an empty {} is fine). */
+/** PATCH /api/orders/:id/cancel and /api/vendor/orders/:id/accept|reject take no body (an empty {} is fine). */
 export const emptyBodySchema = z.strictObject({});
 
 /** GET /api/orders/my-orders */
@@ -52,5 +53,11 @@ export const myOrdersQuerySchema = z.object({
   limit: positiveInteger(MAX_LIMIT).default(DEFAULT_LIMIT),
 });
 
+/** GET /api/vendor/orders: the same paging, plus an optional status filter. */
+export const vendorOrdersQuerySchema = myOrdersQuerySchema.extend({
+  status: z.enum(ORDER_STATUSES).optional(),
+});
+
 export type CreateOrderInput = z.output<typeof createOrderBodySchema>;
 export type MyOrdersQuery = z.output<typeof myOrdersQuerySchema>;
+export type VendorOrdersQuery = z.output<typeof vendorOrdersQuerySchema>;
