@@ -178,6 +178,7 @@ try {
     ["orders", { customerId: 1, createdAt: -1 }, false],
     ["orders", { vendorId: 1, status: 1 }, false],
     ["orders", { itemId: 1, customerId: 1, deliveryDate: 1, status: 1 }, false],
+    ["orders", { itemId: 1, customerId: 1, deliveryDate: 1 }, true], // partial unique: one ACTIVE order per customer, item and day
     ["transactions", { stripeSessionId: 1 }, true],
     ["transactions", { vendorId: 1, createdAt: -1 }, false],
   ];

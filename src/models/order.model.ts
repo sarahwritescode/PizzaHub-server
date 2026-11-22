@@ -13,6 +13,9 @@ import {
 export const ORDER_STATUSES = ["pending", "accepted", "rejected", "cancelled"] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
+/** Orders that still count: waiting for the vendor, or accepted. Rejected and cancelled are over. */
+export const ACTIVE_ORDER_STATUSES: OrderStatus[] = ["pending", "accepted"];
+
 /** A complete order as stored. Defaults: status "pending", createdAt now. */
 export const orderSchema = z.object({
   itemId: objectIdSchema, // references menuItems._id
@@ -66,6 +69,15 @@ export const ordersDefinition: CollectionDefinition = {
   },
 
   indexes: [
+    {
+      // One ACTIVE order per customer, item and delivery day, enforced by MongoDB itself so two
+      // parallel requests cannot both succeed. Rejected and cancelled orders are outside the
+      // index, so ordering the same item again after one of those is allowed.
+      name: "orders_active_customer_item_date_uidx",
+      key: { itemId: 1, customerId: 1, deliveryDate: 1 },
+      unique: true,
+      partialFilterExpression: { status: { $in: ACTIVE_ORDER_STATUSES } },
+    },
     { name: "orders_customerId_createdAt_idx", key: { customerId: 1, createdAt: -1 } },
     { name: "orders_vendorId_status_idx", key: { vendorId: 1, status: 1 } },
     {

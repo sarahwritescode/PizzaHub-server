@@ -85,7 +85,13 @@ const ensureIndex = async (
     const existing = await findSameKey();
     if (!existing) return false;
 
-    if (Boolean(existing.unique) !== Boolean(index.unique)) {
+    if (
+      !isDeepStrictEqual(existing.partialFilterExpression ?? null, index.partialFilterExpression ?? null)
+    ) {
+      report.problems.push(
+        `${label}: an index on ${JSON.stringify(index.key)} already exists ("${existing.name}") with a different partial filter. Left untouched.`
+      );
+    } else if (Boolean(existing.unique) !== Boolean(index.unique)) {
       report.problems.push(
         `${label}: an index on ${JSON.stringify(index.key)} already exists ` +
           `("${existing.name}") but unique=${Boolean(existing.unique)}, expected unique=${Boolean(index.unique)}. Left untouched.`
@@ -102,7 +108,11 @@ const ensureIndex = async (
   try {
     await db
       .collection(collection)
-      .createIndex(index.key, { name: index.name, ...(index.unique ? { unique: true } : {}) });
+      .createIndex(index.key, {
+        name: index.name,
+        ...(index.unique ? { unique: true } : {}),
+        ...(index.partialFilterExpression ? { partialFilterExpression: index.partialFilterExpression } : {}),
+      });
     report.indexesCreated.push(label);
   } catch (error) {
     const code = codeOf(error);

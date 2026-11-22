@@ -14,6 +14,8 @@ export interface IndexDefinition {
   name: string;
   key: Record<string, 1 | -1>;
   unique?: boolean;
+  /** Only documents matching this filter are indexed (and, for a unique index, compared). */
+  partialFilterExpression?: Document;
 }
 
 export interface CollectionDefinition {
