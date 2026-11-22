@@ -1,0 +1,1183 @@
+{
+  "info": {
+    "name": "PizzaHub - Vendor image upload (ImgBB) tests",
+    "description": "See docs/IMAGE_UPLOAD_TESTING.md. Run folder 1 FIRST with an empty cookie jar, then the other folders top to bottom. Every upload request has empty file slots: click 'Select Files' in Body > form-data and pick the file named in the request description. Successful upload cases need a REAL IMGBB_API_KEY in the server's .env.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000"
+    },
+    {
+      "key": "clientUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "password",
+      "value": "Passw0rdOK"
+    },
+    {
+      "key": "runId",
+      "value": ""
+    },
+    {
+      "key": "vendorToken",
+      "value": ""
+    },
+    {
+      "key": "customerToken",
+      "value": ""
+    },
+    {
+      "key": "uploadedUrl",
+      "value": ""
+    },
+    {
+      "key": "uploadedUrls",
+      "value": ""
+    },
+    {
+      "key": "menuItemId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. No login (run FIRST, with an empty cookie jar)",
+      "item": [
+        {
+          "name": "T9 Upload without login -> 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 401\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"code is NO_CREDENTIALS\", () => pm.expect(pm.response.json().code).to.eql(\"NO_CREDENTIALS\"));",
+                  "pm.test(\"success is false\", () => pm.expect(pm.response.json().success).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendor/upload-image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "vendor",
+                "upload-image"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Select any .jpg file. Nothing may reach ImgBB."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Setup (sign up / sign in the test users, save JWTs)",
+      "item": [
+        {
+          "name": "Upload vendor: sign up (ok if the user already exists)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"runId\", Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"signed up, or the user already exists\", () => pm.expect([200, 400, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{clientUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/sign-up/email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "sign-up",
+                "email"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Upload vendor\",\n  \"email\": \"uploadvendor.{{runId}}@pizzahub.test\",\n  \"password\": \"{{password}}\",\n  \"role\": \"vendor\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Upload vendor: sign in",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{clientUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/sign-in/email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "sign-in",
+                "email"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"uploadvendor.{{runId}}@pizzahub.test\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Upload vendor: get JWT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"token received\", () => { const t = pm.response.json().token; pm.expect(t).to.be.a(\"string\"); pm.collectionVariables.set(\"vendorToken\", t); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "token"
+              ]
+            },
+            "description": "Uses the session cookie stored by the sign-in request right above it."
+          }
+        },
+        {
+          "name": "Upload customer: sign up (ok if the user already exists)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"signed up, or the user already exists\", () => pm.expect([200, 400, 409, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{clientUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/sign-up/email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "sign-up",
+                "email"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Upload customer\",\n  \"email\": \"uploadcustomer.{{runId}}@pizzahub.test\",\n  \"password\": \"{{password}}\",\n  \"role\": \"customer\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Upload customer: sign in",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Origin",
+                "value": "{{clientUrl}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/sign-in/email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "sign-in",
+                "email"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"uploadcustomer.{{runId}}@pizzahub.test\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Upload customer: get JWT",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"token received\", () => { const t = pm.response.json().token; pm.expect(t).to.be.a(\"string\"); pm.collectionVariables.set(\"customerToken\", t); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "token"
+              ]
+            },
+            "description": "Uses the session cookie stored by the sign-in request right above it."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Customer is refused",
+      "item": [
+        {
+          "name": "T10 Customer upload -> 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 403\", () => pm.response.to.have.status(403));",
+                  "pm.test(\"code is FORBIDDEN\", () => pm.expect(pm.response.json().code).to.eql(\"FORBIDDEN\"));",
+                  "pm.test(\"success is false\", () => pm.expect(pm.response.json().success).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendor/upload-image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "vendor",
+                "upload-image"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Select any .jpg file. Nothing may reach ImgBB."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Valid uploads (needs a REAL IMGBB_API_KEY on the server)",
+      "item": [
+        {
+          "name": "T1/T11 Vendor uploads a JPEG -> 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"success is true\", () => pm.expect(pm.response.json().success).to.eql(true));",
+                  "pm.test(\"1 image(s) returned, each with an https url\", () => { const imgs = pm.response.json().data.images; pm.expect(imgs).to.have.lengthOf(1); imgs.forEach((i) => pm.expect(i.url).to.match(/^https:\\/\\//)); });",
+                  "pm.test(\"no api key / delete_url in the response\", () => { const t = pm.response.text(); pm.expect(t).to.not.include(\"delete_url\"); pm.expect(t).to.not.include(\"key=\"); });",
+                  "const urls = pm.response.json().data.images.map((i) => i.url); pm.collectionVariables.set(\"uploadedUrl\", urls[0]); pm.collectionVariables.set(\"uploadedUrls\", JSON.stringify(urls));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{vendorToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendor/upload-image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "vendor",
+                "upload-image"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Select a real .jpg / .jpeg file (under 5 MB)."
+          }
+        },
+        {
+          "name": "T2 Vendor uploads a PNG -> 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"success is true\", () => pm.expect(pm.response.json().success).to.eql(true));",
+                  "pm.test(\"1 image(s) returned, each with an https url\", () => { const imgs = pm.response.json().data.images; pm.expect(imgs).to.have.lengthOf(1); imgs.forEach((i) => pm.expect(i.url).to.match(/^https:\\/\\//)); });",
+                  "pm.test(\"no api key / delete_url in the response\", () => { const t = pm.response.text(); pm.expect(t).to.not.include(\"delete_url\"); pm.expect(t).to.not.include(\"key=\"); });",
+                  "const urls = pm.response.json().data.images.map((i) => i.url); pm.collectionVariables.set(\"uploadedUrl\", urls[0]); pm.collectionVariables.set(\"uploadedUrls\", JSON.stringify(urls));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{vendorToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendor/upload-image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "vendor",
+                "upload-image"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Select a real .png file (under 5 MB)."
+          }
+        },
+        {
+          "name": "T3 Vendor uploads a WEBP -> 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"success is true\", () => pm.expect(pm.response.json().success).to.eql(true));",
+                  "pm.test(\"1 image(s) returned, each with an https url\", () => { const imgs = pm.response.json().data.images; pm.expect(imgs).to.have.lengthOf(1); imgs.forEach((i) => pm.expect(i.url).to.match(/^https:\\/\\//)); });",
+                  "pm.test(\"no api key / delete_url in the response\", () => { const t = pm.response.text(); pm.expect(t).to.not.include(\"delete_url\"); pm.expect(t).to.not.include(\"key=\"); });",
+                  "const urls = pm.response.json().data.images.map((i) => i.url); pm.collectionVariables.set(\"uploadedUrl\", urls[0]); pm.collectionVariables.set(\"uploadedUrls\", JSON.stringify(urls));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{vendorToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendor/upload-image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "vendor",
+                "upload-image"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Select a real .webp file (under 5 MB)."
+          }
+        },
+        {
+          "name": "T4 Vendor uploads 3 images at once -> 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"success is true\", () => pm.expect(pm.response.json().success).to.eql(true));",
+                  "pm.test(\"3 image(s) returned, each with an https url\", () => { const imgs = pm.response.json().data.images; pm.expect(imgs).to.have.lengthOf(3); imgs.forEach((i) => pm.expect(i.url).to.match(/^https:\\/\\//)); });",
+                  "pm.test(\"no api key / delete_url in the response\", () => { const t = pm.response.text(); pm.expect(t).to.not.include(\"delete_url\"); pm.expect(t).to.not.include(\"key=\"); });",
+                  "const urls = pm.response.json().data.images.map((i) => i.url); pm.collectionVariables.set(\"uploadedUrl\", urls[0]); pm.collectionVariables.set(\"uploadedUrls\", JSON.stringify(urls));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{vendorToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendor/upload-image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "vendor",
+                "upload-image"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Select 3 real images (jpg / png / webp, each under 5 MB), one per row."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Rejected uploads (work even without an ImgBB key)",
+      "item": [
+        {
+          "name": "T5 Six images -> 400 TOO_MANY_FILES",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"code is TOO_MANY_FILES\", () => pm.expect(pm.response.json().code).to.eql(\"TOO_MANY_FILES\"));",
+                  "pm.test(\"success is false\", () => pm.expect(pm.response.json().success).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{vendorToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendor/upload-image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "vendor",
+                "upload-image"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Select 6 valid images, one per row."
+          }
+        },
+        {
+          "name": "T6 Image over 5 MB -> 413 FILE_TOO_LARGE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 413\", () => pm.response.to.have.status(413));",
+                  "pm.test(\"code is FILE_TOO_LARGE\", () => pm.expect(pm.response.json().code).to.eql(\"FILE_TOO_LARGE\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{vendorToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendor/upload-image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "vendor",
+                "upload-image"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Select a .jpg / .png larger than 5 MB (e.g. a phone photo)."
+          }
+        },
+        {
+          "name": "T7 Unsupported file (GIF / PDF / TXT) -> 415",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 415\", () => pm.response.to.have.status(415));",
+                  "pm.test(\"code is UNSUPPORTED_FILE_TYPE\", () => pm.expect(pm.response.json().code).to.eql(\"UNSUPPORTED_FILE_TYPE\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{vendorToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendor/upload-image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "vendor",
+                "upload-image"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Select a .gif, .pdf or .txt file."
+          }
+        },
+        {
+          "name": "T7b Fake image (a .txt renamed to .jpg) -> 415",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 415\", () => pm.response.to.have.status(415));",
+                  "pm.test(\"code is UNSUPPORTED_FILE_TYPE\", () => pm.expect(pm.response.json().code).to.eql(\"UNSUPPORTED_FILE_TYPE\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{vendorToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendor/upload-image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "vendor",
+                "upload-image"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Create a text file, rename it to fake.jpg and select it. Postman sends image/jpeg, but the content is not an image."
+          }
+        },
+        {
+          "name": "T8 Empty file -> 400 EMPTY_FILE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"code is EMPTY_FILE\", () => pm.expect(pm.response.json().code).to.eql(\"EMPTY_FILE\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{vendorToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendor/upload-image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "vendor",
+                "upload-image"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Select a 0-byte file named empty.jpg (PowerShell: New-Item empty.jpg)."
+          }
+        },
+        {
+          "name": "No file selected -> 400 NO_FILES",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"code is NO_FILES\", () => pm.expect(pm.response.json().code).to.eql(\"NO_FILES\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{vendorToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendor/upload-image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "vendor",
+                "upload-image"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Leave the file slot empty (do not select anything)."
+          }
+        },
+        {
+          "name": "Wrong field name (\"photo\" instead of \"images\") -> 400 UNEXPECTED_FIELD",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"code is UNEXPECTED_FIELD\", () => pm.expect(pm.response.json().code).to.eql(\"UNEXPECTED_FIELD\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{vendorToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendor/upload-image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "vendor",
+                "upload-image"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "photo",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "The key of the form-data row is \"photo\". Select any .jpg."
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. ImgBB failures (need a server change, see docs)",
+      "description": "T12: set IMGBB_API_KEY=invalid in the server's .env, restart the server, run it, then put your real key back. T13: add the line `127.0.0.1 api.imgbb.com` to the Windows hosts file, run it, then REMOVE the line.",
+      "item": [
+        {
+          "name": "T12 ImgBB API key invalid -> 502 UPLOAD_SERVICE_CONFIG_ERROR",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 502\", () => pm.response.to.have.status(502));",
+                  "pm.test(\"code is UPLOAD_SERVICE_CONFIG_ERROR\", () => pm.expect(pm.response.json().code).to.eql(\"UPLOAD_SERVICE_CONFIG_ERROR\"));",
+                  "pm.test(\"success is false\", () => pm.expect(pm.response.json().success).to.eql(false));",
+                  "pm.test(\"provider details are not leaked\", () => pm.expect(pm.response.text()).to.not.include(\"Invalid API\"));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{vendorToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendor/upload-image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "vendor",
+                "upload-image"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Select a real .jpg. The server must run with a wrong IMGBB_API_KEY."
+          }
+        },
+        {
+          "name": "T13 Network error reaching ImgBB -> 502 UPLOAD_SERVICE_UNAVAILABLE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 502\", () => pm.response.to.have.status(502));",
+                  "pm.test(\"code is UPLOAD_SERVICE_UNAVAILABLE\", () => pm.expect(pm.response.json().code).to.eql(\"UPLOAD_SERVICE_UNAVAILABLE\"));",
+                  "pm.test(\"success is false\", () => pm.expect(pm.response.json().success).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{vendorToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendor/upload-image",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "vendor",
+                "upload-image"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "images",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "description": "Select a real .jpg. api.imgbb.com must be unreachable (hosts-file trick in the docs)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Use the uploaded URL in a menu item (run after folder 4)",
+      "item": [
+        {
+          "name": "T14 Create a menu item with the uploaded image URL -> 201 pending",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"status is pending\", () => pm.expect(pm.response.json().data.status).to.eql(\"pending\"));",
+                  "pm.test(\"image url saved as sent\", () => pm.expect(pm.response.json().data.images[0]).to.eql(pm.collectionVariables.get(\"uploadedUrl\")));",
+                  "pm.collectionVariables.set(\"menuItemId\", pm.response.json().data._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{vendorToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendor/menu-items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "vendor",
+                "menu-items"
+              ]
+            },
+            "description": "Uses {{uploadedUrl}} saved by the last successful upload in folder 4.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"itemName\": \"Pizza with uploaded photo\",\n  \"category\": \"Pizza\",\n  \"description\": \"Image hosted on ImgBB\",\n  \"price\": 450,\n  \"location\": \"Dhaka\",\n  \"images\": [\n    \"{{uploadedUrl}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "T14 Same item, several uploaded URLs (from the T4 batch)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{vendorToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/vendor/menu-items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "vendor",
+                "menu-items"
+              ]
+            },
+            "description": "Optional: replace the images array with the three URLs from T4's response.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"itemName\": \"Pizza with 3 photos\",\n  \"category\": \"Pizza\",\n  \"description\": \"Several ImgBB images\",\n  \"price\": 500,\n  \"location\": \"Dhaka\",\n  \"images\": [\n    \"{{uploadedUrl}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

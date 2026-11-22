@@ -22,6 +22,16 @@ const envSchema = z.object({
 
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
+
+  // ImgBB API key for POST /api/vendor/upload-image (https://api.imgbb.com/).
+  // Optional on purpose: without it the server still starts and every other
+  // API works; only the upload endpoint answers 503 UPLOAD_NOT_CONFIGURED.
+  // An empty value (the .env.example placeholder) counts as "not set".
+  IMGBB_API_KEY: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => value || undefined),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
