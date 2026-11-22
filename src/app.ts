@@ -6,7 +6,7 @@ import helmet from "helmet";
 
 import { toNodeHandler } from "better-auth/node";
 
-import { env } from "./config/env.js";
+import { ALLOWED_ORIGINS } from "./config/env.js";
 import { connectDB } from "./config/db.js";
 import { initializeDatabase } from "./config/initDatabase.js";
 import { auth } from "./lib/auth.js";
@@ -27,7 +27,7 @@ app.use(helmet());
 // CORS configuration
 app.use(
   cors({
-    origin: env.CLIENT_URL,
+    origin: [...ALLOWED_ORIGINS], // exact origins only: never "*", never a blind reflection
     credentials: true,
   })
 );

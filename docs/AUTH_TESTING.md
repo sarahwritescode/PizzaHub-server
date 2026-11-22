@@ -80,3 +80,12 @@ Postman automatically sends the session cookie after you sign in. That is fine f
 - **Why the Origin rule:** with `sameSite: "none"` cookies (production, different domains) a malicious site could make the browser send the cookie. Cookie-authenticated requests that change data are refused when `Origin` is another site. Bearer requests are not affected because browsers do not attach `Authorization` on their own.
 - **Blocked users:** they cannot start a new session, and the API rejects every token or session they already hold. Revoking their old sessions when you add a "block user" endpoint is still a good idea (`/api/auth/token` will still hand an old session a JWT, which the API then rejects).
 - `/api/test/*` only exist to verify authentication; remove or restrict them before a production release if you do not want them public.
+
+## Allowed origins (CLIENT_URL and EXTRA_ALLOWED_ORIGINS)
+
+Browsers may call this API only from origins in one list, `ALLOWED_ORIGINS` (`src/config/env.ts`): `CLIENT_URL`
+(always, the production frontend) plus the optional, comma-separated `EXTRA_ALLOWED_ORIGINS`
+(e.g. `EXTRA_ALLOWED_ORIGINS=http://localhost:3000` so a local frontend can use the deployed API). The same list feeds
+CORS, Better Auth's `trustedOrigins` and the cookie-auth origin check (`403 ORIGIN_NOT_ALLOWED`).
+Each entry must be an exact `http(s)` origin; `*`, wildcard hosts and other protocols make the server refuse to start.
+Paths and trailing slashes are dropped. Leave it empty in production unless you need it. `npm run verify:origins` checks it.

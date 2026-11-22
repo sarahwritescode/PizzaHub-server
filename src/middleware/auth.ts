@@ -1,7 +1,7 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import { fromNodeHeaders } from "better-auth/node";
 
-import { env } from "../config/env.js";
+import { ALLOWED_ORIGINS } from "../config/env.js";
 import { auth } from "../lib/auth.js";
 import { JwtVerificationError, verifyAccessToken } from "../lib/jwt.js";
 
@@ -58,7 +58,6 @@ const toAuthUser = (user: {
 });
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-const ALLOWED_ORIGIN = new URL(env.CLIENT_URL).origin;
 
 /**
  * Authentication: who is calling? Never authorization.
@@ -127,7 +126,7 @@ export const requireAuth: RequestHandler = async (
       // curl) do not, and are not CSRF vectors.
       const origin = req.headers.origin;
 
-      if (!SAFE_METHODS.has(req.method) && origin && origin !== ALLOWED_ORIGIN) {
+      if (!SAFE_METHODS.has(req.method) && origin && !ALLOWED_ORIGINS.includes(origin)) {
         return fail(res, 403, "ORIGIN_NOT_ALLOWED", "Origin not allowed.");
       }
 

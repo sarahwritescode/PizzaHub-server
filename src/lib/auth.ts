@@ -4,7 +4,7 @@ import { createAuthMiddleware, APIError } from "better-auth/api";
 import { jwt } from "better-auth/plugins";
 
 import { client } from "../config/db.js";
-import { env } from "../config/env.js";
+import { ALLOWED_ORIGINS, env } from "../config/env.js";
 
 const isProduction = env.NODE_ENV === "production";
 
@@ -53,7 +53,7 @@ export const auth = betterAuth({
     client,
   }),
 
-  trustedOrigins: [env.CLIENT_URL],
+  trustedOrigins: [...ALLOWED_ORIGINS],
 
   // Cross-domain cookies in production (frontend and API on different domains).
   // `sameSite: "none"` requires `secure: true`, which only works over HTTPS,

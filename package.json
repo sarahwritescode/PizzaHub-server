@@ -12,7 +12,8 @@
     "verify:db": "tsx src/scripts/verifyDatabase.ts",
     "verify:menu": "tsx src/scripts/verifyMenuApi.ts",
     "verify:vendor": "tsx src/scripts/verifyVendorApi.ts",
-    "verify:upload": "tsx src/scripts/verifyUploadApi.ts"
+    "verify:upload": "tsx src/scripts/verifyUploadApi.ts",
+    "verify:origins": "tsx src/scripts/verifyOrigins.ts"
   },
   "keywords": [],
   "author": "",
