@@ -5,7 +5,7 @@ No login is needed for any of these endpoints.
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/menu-items` | Public list with search, filters, sorting, pagination |
-| `GET /api/menu-items/featured` | Up to 6 newest public items (homepage) |
+| `GET /api/menu-items/featured` | Up to 6 public items for the homepage: active Premium vendors' items first, then the newest |
 | `GET /api/menu-items/:id` | One public item |
 | `GET /api/categories` | Unique categories of public items, with counts |
 
@@ -15,8 +15,36 @@ An item is public when **`status === "approved"`**. The `menuItems` schema has n
 "active" field: `inactive` is one of the `status` values, so requiring `approved` already hides
 `pending`, `rejected` and `inactive` items. No new field was added.
 
-Public responses contain only `_id, itemName, category, description, price, location, images, createdAt`.
+Public responses contain only `_id, itemName, category, description, price, location, images, createdAt, vendor`.
 `vendorId` and `status` are never returned.
+
+### The `vendor` field
+
+Every public item (list, featured, single) has a `vendor` object, exactly these three keys:
+
+```json
+"vendor": { "name": "Alpha Owner", "businessName": "Alpha Kitchen", "isPremium": true }
+```
+
+| Key | Meaning |
+|---|---|
+| `name` | The vendor's name |
+| `businessName` | The vendor's business name, `null` when they have none |
+| `isPremium` | The **effective** Premium state. `true` only while the paid period has not run out. A Free vendor, an **expired** Premium, and a Premium without an expiry date are all `false` (the same rule as `GET /api/vendor/subscription`) |
+
+* **Never exposed:** the vendor's id (there is no `vendorId` and the vendor has no `_id`), email, role, blocked flag,
+  plan dates, and any Stripe or subscription data. Only `name`, `businessName`, `subscriptionPlan` and
+  `subscriptionExpiresAt` are read from `users`, and the last two are used only to compute `isPremium`.
+* `vendor` is `null` when the vendor's account no longer exists (the item is still listed).
+* One extra query per page loads all vendors of the page; there is no query per item.
+* The state is read on every request: when a Premium period runs out, `isPremium` turns `false` immediately.
+* Items of a **blocked** vendor stay hidden, as before.
+
+### Premium first in `/featured`
+
+`GET /api/menu-items/featured` returns up to 6 items: first the approved items of vendors whose Premium is **active**
+(newest first), then, to fill the 6, the newest approved items of everyone else. Only `/featured` does this: the normal
+list (`/api/menu-items`) keeps the sort the caller asked for (`sortBy` / `order`), so pagination is not affected.
 
 ## Query parameters of `GET /api/menu-items`
 
@@ -58,7 +86,8 @@ List (`pagination` is only in the list):
       "price": 400,
       "location": "Dhaka",
       "images": ["https://example.com/margherita.jpg"],
-      "createdAt": "2026-01-20T10:00:00.000Z"
+      "createdAt": "2026-01-20T10:00:00.000Z",
+      "vendor": { "name": "Alpha Owner", "businessName": "Alpha Kitchen", "isPremium": false }
     }
   ],
   "pagination": { "page": 1, "limit": 12, "totalItems": 1, "totalPages": 1, "hasNextPage": false, "hasPreviousPage": false }
@@ -95,7 +124,15 @@ npm run verify:menu
 
 Starts the real app on a random port, creates a **throwaway database** (`pizzahub_menu_verify_<time>`),
 inserts approved/pending/rejected/inactive items there, calls every endpoint over HTTP, then drops the
-throwaway database. Your real data is never touched.
+throwaway database. Your real data is never touched. 122 checks, including the vendor field:
+
+* `vendor` has exactly `name`, `businessName`, `isPremium` in the list, in `/featured` and in the single item
+* no email, `vendorId`, role, blocked flag, plan date or Stripe text anywhere in those responses
+* Free vendor `isPremium: false`, active Premium `true`, **expired** Premium `false`, Premium without an expiry date `false`,
+  missing vendor account `vendor: null`
+* `/featured` puts the active Premium vendor's items first (newest of them first) even though they are older, then the
+  newest of everyone else; the normal list and the price sort are not reordered
+* the state follows the data live (Premium running out, a vendor becoming Premium), and a blocked Premium vendor's items stay hidden
 
 ## Test data for manual / Postman testing
 

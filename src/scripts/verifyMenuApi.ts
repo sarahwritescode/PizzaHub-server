@@ -11,7 +11,7 @@ const { ObjectId } = await import("mongodb");
 const { default: app } = await import("../app.js");
 const { client, connectDB, getDB } = await import("../config/db.js");
 const { initializeDatabase } = await import("../config/initDatabase.js");
-const { menuItemsCollection } = await import("../models/index.js");
+const { menuItemsCollection, usersCollection } = await import("../models/index.js");
 
 let passed = 0;
 const failures: string[] = [];
@@ -124,6 +124,13 @@ try {
       images: ["https://example.com/pizza.jpg"],
     }))
   );
+  // The vendor of every seeded item: a Free vendor with a business name.
+  await usersCollection().insertOne({
+    _id: vendorId, name: "Free Owner", email: "free.owner@pizzahub.test", emailVerified: true, role: "vendor",
+    isBlocked: false, businessName: "Free Kitchen", subscriptionPlan: "free", subscriptionExpiresAt: null,
+    createdAt: new Date(), updatedAt: new Date(),
+  } as never);
+
   const idOf = (index: number) => insert.insertedIds[index]!;
   const hiddenId = (i: number) => idOf(approved.length + fillers.length + i);
 
@@ -144,7 +151,7 @@ try {
     check("pending/rejected/inactive items are never listed", !all.some((n) => /^(Pending|Rejected|Inactive) Pizza$/.test(n)), all);
 
     const first = res.body.data[0];
-    check("item exposes only public fields", JSON.stringify(Object.keys(first).sort()) === JSON.stringify(["_id", "category", "createdAt", "description", "images", "itemName", "location", "price"]), Object.keys(first));
+    check("item exposes only public fields", JSON.stringify(Object.keys(first).sort()) === JSON.stringify(["_id", "category", "createdAt", "description", "images", "itemName", "location", "price", "vendor"]), Object.keys(first));
     check("vendorId and status are not exposed", !("vendorId" in first) && !("status" in first));
 
     const page2 = await get("/api/menu-items?page=2&limit=12");
@@ -321,6 +328,101 @@ try {
     check("pending/rejected/inactive are excluded even though they are newer", !names(res).some((n) => /^(Pending|Rejected|Inactive) Pizza$/.test(n)));
     check("no pagination block", !("pagination" in res.body));
     check("only public fields", !("vendorId" in res.body.data[0]) && !("status" in res.body.data[0]));
+  }
+
+  // ---------------------------------------------------------------- vendor info + Premium
+  section("Vendor info (name, businessName, isPremium) and Premium first in /featured");
+  {
+    const DAY = 86_400_000;
+    const user = (name: string, businessName: string | null, plan: "free" | "premium", expires: Date | null, extra: object = {}) => ({
+      _id: new ObjectId(), name, email: `${name.replace(/\s+/g, ".").toLowerCase()}@pizzahub.test`, emailVerified: true, role: "vendor",
+      isBlocked: false, businessName, subscriptionPlan: plan, subscriptionExpiresAt: expires,
+      createdAt: new Date(), updatedAt: new Date(), ...extra,
+    });
+
+    const premium = user("Premium Owner", "Premium Pizzeria", "premium", new Date(Date.now() + 30 * DAY), {
+      stripeCustomerId: "cus_SECRET_premium", stripeSubscriptionId: "sub_SECRET_premium", subscriptionStatus: "active",
+    });
+    const expired = user("Expired Owner", "Expired Grill", "premium", new Date(Date.now() - DAY), { stripeCustomerId: "cus_SECRET_expired" });
+    const noDate = user("No Date Owner", null, "premium", null);
+    await usersCollection().insertMany([premium, expired, noDate] as never);
+
+    const orphanVendorId = new ObjectId(); // a vendor account that no longer exists
+    const mk = (itemName: string, vendor: { _id: InstanceType<typeof ObjectId> }, createdAt: Date) => ({
+      ...item({ itemName, category: "VendorInfo", createdAt }), vendorId: vendor._id, images: ["https://example.com/v.jpg"],
+    });
+    const extra = await menuItemsCollection().insertMany([
+      mk("Premium Old Pizza", premium, day(2)),
+      mk("Premium Older Pizza", premium, day(1)),
+      mk("Expired Newest Pizza", expired, day(30)), // the newest item of the whole menu
+      mk("No Date Pizza", noDate, day(4)),
+      mk("Orphan Pizza", { _id: orphanVendorId }, day(5)),
+    ] as never);
+    const extraId = (i: number) => extra.insertedIds[i]!.toHexString();
+    const byName = (res: { body: Json }, name: string) => res.body.data.find((x: Json) => x.itemName === name);
+
+    const list = await get("/api/menu-items?limit=50");
+    const featured = await get("/api/menu-items/featured");
+    const detail = await get(`/api/menu-items/${extraId(0)}`);
+
+    const SHAPE = "businessName,isPremium,name";
+    const keysOf = (o: Json) => Object.keys(o).sort().join();
+
+    // ---- shape
+    check("list: every item has a vendor with exactly name, businessName, isPremium (or null for a missing account)", list.body.data.every((x: Json) => x.vendor === null || keysOf(x.vendor) === SHAPE), list.body.data.find((x: Json) => x.vendor && keysOf(x.vendor) !== SHAPE));
+    check("featured: every item has the same vendor shape", featured.body.data.every((x: Json) => x.vendor === null || keysOf(x.vendor) === SHAPE));
+    check("detail: the vendor has the same shape", detail.status === 200 && keysOf(detail.body.data.vendor) === SHAPE, detail.body.data);
+    check("vendor field types: name string, businessName string|null, isPremium boolean", list.body.data.every((x: Json) => x.vendor === null || (typeof x.vendor.name === "string" && (x.vendor.businessName === null || typeof x.vendor.businessName === "string") && typeof x.vendor.isPremium === "boolean")));
+    check("an item has the other public fields plus vendor, nothing more", keysOf(list.body.data[0]) === "_id,category,createdAt,description,images,itemName,location,price,vendor", keysOf(list.body.data[0]));
+
+    // ---- no leak
+    const FORBIDDEN = ["email", "@pizzahub.test", "vendorId", '"role"', "isBlocked", "password", "token", "secret", "stripe", "subscription", "cus_", "sub_", "emailVerified", "updatedAt"];
+    const leaks = (body: Json) => FORBIDDEN.filter((word) => JSON.stringify(body).toLowerCase().includes(word.toLowerCase()));
+    check("list: no email, vendorId, role, flags, plan dates or Stripe text anywhere", leaks(list.body).length === 0, leaks(list.body));
+    check("featured: no leak", leaks(featured.body).length === 0, leaks(featured.body));
+    check("detail: no leak", leaks(detail.body).length === 0, leaks(detail.body));
+    check("no item has a vendorId, and the vendor has no _id", list.body.data.every((x: Json) => !("vendorId" in x) && (x.vendor === null || !("_id" in x.vendor))));
+
+    // ---- values
+    const free = byName(list, "Margherita Pizza")?.vendor;
+    check("Free vendor -> isPremium false, name and businessName come through", free?.isPremium === false && free?.name === "Free Owner" && free?.businessName === "Free Kitchen", free);
+    const prem = byName(list, "Premium Old Pizza")?.vendor;
+    check("active Premium vendor -> isPremium true, name and businessName come through", prem?.isPremium === true && prem?.name === "Premium Owner" && prem?.businessName === "Premium Pizzeria", prem);
+    const exp = byName(list, "Expired Newest Pizza")?.vendor;
+    check("EXPIRED Premium -> isPremium false (strictly false), name and businessName still shown", exp?.isPremium === false && exp?.name === "Expired Owner" && exp?.businessName === "Expired Grill", exp);
+    const nd = byName(list, "No Date Pizza")?.vendor;
+    check("plan premium but no expiry date -> isPremium false, businessName null", nd?.isPremium === false && nd?.businessName === null, nd);
+    check("a vendor account that no longer exists -> vendor null, the item is still listed", byName(list, "Orphan Pizza")?.vendor === null);
+    check("detail of a Premium item -> isPremium true", detail.body.data.vendor.isPremium === true, detail.body.data.vendor);
+    check("detail of an expired Premium item -> isPremium false", (await get(`/api/menu-items/${extraId(2)}`)).body.data.vendor.isPremium === false);
+
+    // ---- featured: Premium first
+    check(
+      "featured: the active Premium vendor's items come FIRST (newest of them first), then the newest of everyone else",
+      JSON.stringify(names(featured)) === JSON.stringify(["Premium Old Pizza", "Premium Older Pizza", "Expired Newest Pizza", "Margherita Pizza", "Chicken Supreme Pizza", "Chicken Tikka Pizza"]),
+      names(featured)
+    );
+    check("featured: still 6 items and no pagination", featured.body.data.length === 6 && !("pagination" in featured.body));
+    check("featured: only the first two are Premium", featured.body.data.map((x: Json) => x.vendor?.isPremium).join() === "true,true,false,false,false,false", featured.body.data.map((x: Json) => x.vendor?.isPremium));
+    check("the normal list is NOT reordered by Premium (newest first: the expired vendor's item leads)", list.body.data[0].itemName === "Expired Newest Pizza" && isSorted(list.body.data.map((x: Json) => +new Date(x.createdAt)), "desc"));
+    check("the list sorted by price is not reordered by Premium either", isSorted((await get("/api/menu-items?sortBy=price&order=asc&limit=50")).body.data.map((x: Json) => x.price), "asc"));
+
+    // ---- live: the state is read on every request
+    await usersCollection().updateOne({ _id: premium._id }, { $set: { subscriptionExpiresAt: new Date(Date.now() - 1000) } });
+    const lapsed = await get("/api/menu-items/featured");
+    check("when the Premium period runs out, the vendor loses the top spots and isPremium turns false", names(lapsed)[0] === "Expired Newest Pizza" && !lapsed.body.data.some((x: Json) => x.vendor?.isPremium === true), names(lapsed));
+    await usersCollection().updateOne({ _id: expired._id }, { $set: { subscriptionExpiresAt: new Date(Date.now() + DAY) } });
+    const renewed = await get("/api/menu-items/featured");
+    check("when a vendor becomes Premium, their item is on top and isPremium turns true", names(renewed)[0] === "Expired Newest Pizza" && renewed.body.data[0].vendor.isPremium === true, names(renewed));
+
+    // ---- hidden stays hidden
+    await usersCollection().updateOne({ _id: expired._id }, { $set: { isBlocked: true } });
+    const blockedFeatured = await get("/api/menu-items/featured");
+    check("a BLOCKED Premium vendor's items stay hidden from featured and the list", !names(blockedFeatured).includes("Expired Newest Pizza") && !names(await get("/api/menu-items?limit=50")).includes("Expired Newest Pizza"));
+
+    await menuItemsCollection().deleteMany({ _id: { $in: Object.values(extra.insertedIds) } } as never);
+    await usersCollection().deleteMany({ _id: { $in: [premium._id, expired._id, noDate._id] } } as never);
+    check("cleanup: the original items are back and /featured is the plain newest-first list again", (await get("/api/menu-items")).body.pagination.totalItems === TOTAL_APPROVED && names(await get("/api/menu-items/featured"))[0] === "Margherita Pizza");
   }
 
   // ---------------------------------------------------------------- unchanged things

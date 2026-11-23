@@ -1,8 +1,9 @@
 import type { Filter, ObjectId, Sort } from "mongodb";
 
-import { menuItemsCollection, usersCollection, type MenuItemDoc } from "../models/index.js";
+import { menuItemsCollection, usersCollection, type MenuItemDoc, type UserDoc } from "../models/index.js";
 import { buildPagination } from "../utils/pagination.js";
 import type { MenuItemsQuery } from "../validations/menu.validation.js";
+import { hasPremium } from "./vendorMenu.service.js";
 
 /**
  * A menu item is public when status === "approved".
@@ -31,8 +32,8 @@ const publicFilter = async (): Promise<Filter<MenuItemDoc>> => {
 export const FEATURED_LIMIT = 6;
 
 /**
- * Allow-list of fields that leave the server. vendorId (an internal reference)
- * and status (always "approved" here) are deliberately not included.
+ * Allow-list of fields read from the database. vendorId is read only to look the vendor up and
+ * is removed again before anything leaves the server; status (always "approved" here) is not read.
  */
 const PUBLIC_PROJECTION = {
   itemName: 1,
@@ -42,12 +43,74 @@ const PUBLIC_PROJECTION = {
   location: 1,
   images: 1,
   createdAt: 1,
+  vendorId: 1,
 } as const;
+
+type StoredPublicItem = Pick<
+  MenuItemDoc,
+  "_id" | "itemName" | "category" | "description" | "price" | "location" | "images" | "createdAt" | "vendorId"
+>;
+
+/**
+ * What a customer may know about the vendor: a name, the business name and the Premium badge.
+ * No id, no email, no plan dates and no Stripe or subscription data.
+ */
+export interface PublicVendor {
+  name: string;
+  businessName: string | null;
+  /** The EFFECTIVE Premium state: false for a Free vendor and for a Premium whose paid period has run out. */
+  isPremium: boolean;
+}
 
 export type PublicMenuItem = Pick<
   MenuItemDoc,
   "_id" | "itemName" | "category" | "description" | "price" | "location" | "images" | "createdAt"
->;
+> & {
+  /** null only when the vendor account no longer exists (the item is still listed). */
+  vendor: PublicVendor | null;
+};
+
+/** Allow-list read from `users` (never the email, the role or any Stripe field). */
+const VENDOR_PROJECTION = { name: 1, businessName: 1, subscriptionPlan: 1, subscriptionExpiresAt: 1 } as const;
+
+type StoredVendor = Pick<UserDoc, "_id" | "name"> &
+  Partial<Pick<UserDoc, "businessName" | "subscriptionPlan" | "subscriptionExpiresAt">>;
+
+/**
+ * Adds `vendor` to every item and drops vendorId. One extra query for all vendors of the page
+ * (not one per item), the same approach as the admin menu list.
+ */
+const withPublicVendors = async (items: StoredPublicItem[]): Promise<PublicMenuItem[]> => {
+  const vendorIds = [...new Map(items.map((item) => [item.vendorId.toHexString(), item.vendorId])).values()];
+
+  const vendors =
+    vendorIds.length === 0
+      ? []
+      : await usersCollection()
+          .find({ _id: { $in: vendorIds } })
+          .project<StoredVendor>(VENDOR_PROJECTION)
+          .toArray();
+
+  const byId = new Map(vendors.map((vendor) => [vendor._id.toHexString(), vendor]));
+
+  return items.map(({ vendorId, ...item }) => {
+    const vendor = byId.get(vendorId.toHexString());
+
+    return {
+      ...item,
+      vendor: vendor
+        ? {
+            name: vendor.name,
+            businessName: vendor.businessName ?? null,
+            isPremium: hasPremium({
+              subscriptionPlan: vendor.subscriptionPlan ?? "free",
+              subscriptionExpiresAt: vendor.subscriptionExpiresAt,
+            }),
+          }
+        : null,
+    };
+  });
+};
 
 export interface CategorySummary {
   name: string;
@@ -101,7 +164,7 @@ export const listPublicMenuItems = async (query: MenuItemsQuery) => {
   const [items, totalItems] = await Promise.all([
     collection
       .find(filter)
-      .project<PublicMenuItem>(PUBLIC_PROJECTION)
+      .project<StoredPublicItem>(PUBLIC_PROJECTION)
       .sort(sort)
       .skip((page - 1) * limit)
       .limit(limit)
@@ -109,25 +172,65 @@ export const listPublicMenuItems = async (query: MenuItemsQuery) => {
     collection.countDocuments(filter),
   ]);
 
-  return { items, pagination: buildPagination(page, limit, totalItems) };
+  return { items: await withPublicVendors(items), pagination: buildPagination(page, limit, totalItems) };
 };
 
 /** GET /api/menu-items/:id. Returns null for a missing OR non-public item (the caller answers 404). */
-export const findPublicMenuItem = async (id: ObjectId) =>
-  menuItemsCollection()
+export const findPublicMenuItem = async (id: ObjectId): Promise<PublicMenuItem | null> => {
+  const item = await menuItemsCollection()
     .find({ _id: id, ...(await publicFilter()) })
-    .project<PublicMenuItem>(PUBLIC_PROJECTION)
+    .project<StoredPublicItem>(PUBLIC_PROJECTION)
     .limit(1)
     .next();
 
-/** GET /api/menu-items/featured. No "featured" field exists, so: the newest approved items. */
-export const listFeaturedMenuItems = async () =>
-  menuItemsCollection()
-    .find(await publicFilter())
-    .project<PublicMenuItem>(PUBLIC_PROJECTION)
-    .sort({ createdAt: -1, _id: -1 })
-    .limit(FEATURED_LIMIT)
-    .toArray();
+  return item ? (await withPublicVendors([item]))[0]! : null;
+};
+
+/**
+ * GET /api/menu-items/featured. No "featured" field exists, so: items of vendors with an ACTIVE
+ * Premium plan first (newest first), then the newest approved items of everyone else, 6 in total.
+ * A Premium whose paid period has run out does not count (the same rule as hasPremium).
+ * Only this endpoint puts Premium first; the normal list keeps the sort the caller asked for.
+ */
+export const listFeaturedMenuItems = async (): Promise<PublicMenuItem[]> => {
+  const visible = await publicFilter();
+
+  // find + projection, not distinct(): the Atlas connection uses the strict Stable API, which has no distinct.
+  const premiumVendorIds = (
+    await usersCollection()
+      .find({ role: "vendor", subscriptionPlan: "premium", subscriptionExpiresAt: { $gt: new Date() } })
+      .project<{ _id: ObjectId }>({ _id: 1 })
+      .toArray()
+  ).map((vendor) => vendor._id);
+
+  const newestFirst = { createdAt: -1, _id: -1 } as const;
+
+  const premiumItems =
+    premiumVendorIds.length === 0
+      ? []
+      : await menuItemsCollection()
+          .find({ $and: [visible, { vendorId: { $in: premiumVendorIds } }] })
+          .project<StoredPublicItem>(PUBLIC_PROJECTION)
+          .sort(newestFirst)
+          .limit(FEATURED_LIMIT)
+          .toArray();
+
+  const otherItems =
+    premiumItems.length >= FEATURED_LIMIT
+      ? []
+      : await menuItemsCollection()
+          .find(
+            premiumVendorIds.length === 0
+              ? visible
+              : { $and: [visible, { vendorId: { $nin: premiumVendorIds } }] }
+          )
+          .project<StoredPublicItem>(PUBLIC_PROJECTION)
+          .sort(newestFirst)
+          .limit(FEATURED_LIMIT - premiumItems.length)
+          .toArray();
+
+  return withPublicVendors([...premiumItems, ...otherItems]);
+};
 
 /**
  * GET /api/categories. Unique categories of public items with their item count.
