@@ -13,3 +13,10 @@ docs/CLIENT_API_GUIDE.md
 
 # Vercel project link (created by `vercel link`)
 .vercel
+
+# Editor settings (personal, not part of the project)
+.vscode/
+.idea/
+
+# TypeScript incremental build cache
+*.tsbuildinfo

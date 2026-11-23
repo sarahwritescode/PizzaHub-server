@@ -25,6 +25,23 @@ If an `Authorization` header is present it is the only credential considered: a 
 
 Users: customer and vendor sign up with `POST /api/auth/sign-up/email` (`role` is `customer` or `vendor`). Admin accounts exist only through `npm run seed:admin` (set `ADMIN_NAME`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` in `.env`).
 
+## Roles and profile updates
+
+* **Sign-up** (`POST /api/auth/sign-up/email`): `role` is `customer` or `vendor` (default `customer`). `admin` or any
+  other value is `400 Role must be either "customer" or "vendor".` and no user is created.
+* **Update profile** (`POST /api/auth/update-user`, signed in): only **`name`, `image` and `businessName`** are accepted.
+  * Any `role` key is refused with `400 Role cannot be changed.`, **whatever the value** (also the user's current role, also
+    `null` or `""`). A customer cannot become a vendor, a vendor cannot become a customer, nobody can become admin.
+  * Any other key (`email`, `emailVerified`, `isBlocked`, `subscriptionPlan`, `subscriptionExpiresAt`, `subscriptionStatus`,
+    `stripe*`, `id`, `createdAt`, an unknown field, ...) is refused with `400 Only name, image and businessName can be
+    updated.`
+  * The check runs before anything is saved, so a refused request changes nothing, even when it also carries a valid
+    `name`.
+  * `{ "name": "X" }` is `200`.
+* This is the Better Auth `hooks.before` in `src/lib/auth.ts`. Admin accounts exist only through `npm run seed:admin`.
+* Found by `npm run verify:auth`: before this rule, a signed-in customer could send `{ "role": "vendor" }` to
+  `update-user` and become a vendor.
+
 ## Endpoints
 
 | Endpoint | Needs |
@@ -70,6 +87,15 @@ Edit the `adminEmail` / `adminPassword` collection variables to the admin you se
 | 6 | Vendor | `/vendor` 200, `/customer` 403, `/admin` 403 | as listed |
 | 7 | Admin | `/admin` 200, `/vendor` 403, `/customer` 403 | as listed |
 | 8 | Blocked user | Get a token, then set `isBlocked: true` on that user in the `users` collection, call `/protected` again; also try to sign in again | 403 `ACCOUNT_BLOCKED` for both |
+
+Automated check of the role and profile-update rules (sign-up roles, `update-user` role and field refusals, allowed fields
+still work, database unchanged after every refused request):
+
+```
+npm run verify:auth
+```
+
+It uses real sign-up and real Better Auth sessions in a throwaway MongoDB database that is dropped at the end (35 checks).
 
 Postman automatically sends the session cookie after you sign in. That is fine for cases 2 to 8 (the Bearer token wins), but for case 1 delete the cookies first (**Cookies** link under Send, then delete the `localhost` cookies).
 

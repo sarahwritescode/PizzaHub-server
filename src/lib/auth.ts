@@ -21,6 +21,9 @@ const PUBLIC_ROLES = ["customer", "vendor"] as const;
 const isPublicRole = (role: unknown): boolean =>
   typeof role === "string" && (PUBLIC_ROLES as readonly string[]).includes(role);
 
+// The only body fields POST /api/auth/update-user accepts.
+const UPDATE_USER_ALLOWED_FIELDS: readonly string[] = ["name", "image", "businessName"];
+
 // Password rule: min length is enforced by better-auth (minPasswordLength),
 // this adds one uppercase + one lowercase letter.
 const assertPasswordStrength = (password: unknown) => {
@@ -149,11 +152,27 @@ export const auth = betterAuth({
     before: createAuthMiddleware(async (ctx) => {
       const body = ctx.body as Record<string, unknown> | undefined;
 
-      // 1) Nobody can become admin (or any unknown role) through the API.
-      if (ctx.path === "/sign-up/email" || ctx.path === "/update-user") {
+      // 1a) Sign-up: the role is picked once, and only "customer" or "vendor" (never admin).
+      if (ctx.path === "/sign-up/email") {
         if (body?.role !== undefined && !isPublicRole(body.role)) {
           throw new APIError("BAD_REQUEST", {
             message: 'Role must be either "customer" or "vendor".',
+          });
+        }
+      }
+
+      // 1b) Update profile: a role can never be changed through the API, whatever the value
+      // (even the user's current one: the key alone is refused). Only an allow-list of fields
+      // is accepted, so email, isBlocked, subscription* and stripe* can never be written here.
+      // Checked before anything is saved, so a refused request changes nothing.
+      if (ctx.path === "/update-user" && body && typeof body === "object" && !Array.isArray(body)) {
+        if (Object.hasOwn(body, "role")) {
+          throw new APIError("BAD_REQUEST", { message: "Role cannot be changed." });
+        }
+
+        if (Object.keys(body).some((key) => !UPDATE_USER_ALLOWED_FIELDS.includes(key))) {
+          throw new APIError("BAD_REQUEST", {
+            message: "Only name, image and businessName can be updated.",
           });
         }
       }

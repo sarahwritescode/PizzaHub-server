@@ -124,6 +124,7 @@ npm run verify:customer-orders   # customer orders
 npm run verify:vendor-orders     # vendor order handling
 npm run verify:stripe            # Stripe checkout, signed webhook, Premium lifecycle
 npm run verify:jwt-expiry        # an expired access token is refused
+npm run verify:auth              # sign-up roles, update-user cannot change the role or protected fields
 ```
 
 The full result of the last audit, including what has and has not been tested against real services, is in
