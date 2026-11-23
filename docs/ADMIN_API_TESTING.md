@@ -101,6 +101,9 @@ What a block does:
 * takes effect on the **next request**: `requireAuth` reads `isBlocked` from the database on every request, so JWTs and
   cookies issued earlier are refused with `403 ACCOUNT_BLOCKED`; a blocked user also cannot sign in;
 * **deletes nothing**: the user, their menu items, orders and transactions stay as they are;
+* a blocked **vendor's** approved items leave the public menu (list, detail, featured, categories) and cannot be ordered
+  (409 `MENU_ITEM_UNAVAILABLE`), because nobody could accept or reject those orders. They come back on unblock. Orders
+  placed before the block are untouched and the customer can still cancel them;
 * the write only matches while the user still has the opposite state, so two admins acting at the same moment cannot
   both succeed (one gets 409).
 
@@ -138,7 +141,7 @@ npm run verify:admin
 ```
 
 Real sign-up, real Better Auth JWTs, real HTTP, in a throwaway MongoDB database (`pizzahub_admin_verify_<time>`, dropped
-at the end; your data is never touched). 156 checks, including:
+at the end; your data is never touched). 171 checks, including:
 
 1. every endpoint: anonymous 401, customer 403, vendor 403, blocked admin 403, bad token 401, cookie CSRF guard
 2. user list: safe fields only, newest first, 3-page pagination, search by name and email (and `.*` is not a regex),
@@ -151,7 +154,8 @@ at the end; your data is never touched). 156 checks, including:
 7. transaction list, status and vendor filters, pagination, validation, orphaned vendor
 8. POST/PUT/PATCH/DELETE on transactions are 404 and the collection is unchanged byte for byte
 9. dashboard counts match the database, expired/non-vendor Premium not counted, numbers update live, empty database gives zeros
-10. health, public menu, admin menu, vendor, order APIs unchanged
+10. (section 11 of the script) a blocked vendor's items leave the public menu and cannot be ordered, nothing is deleted, they return on unblock
+11. (section 12 of the script) health, public menu, admin menu, vendor, order APIs unchanged
 
 ## Manual check (Postman / curl)
 

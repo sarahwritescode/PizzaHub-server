@@ -113,6 +113,12 @@ export const createOrder = async (customerId: ObjectId, input: CreateOrderInput)
     throw new HttpError(403, "You cannot order your own menu item.", "CANNOT_ORDER_OWN_ITEM");
   }
 
+  // A blocked vendor cannot accept or reject anything (every API refuses a blocked account), so
+  // their items cannot be ordered. Same answer as an unavailable item. Existing orders are untouched.
+  if (await usersCollection().findOne({ _id: item.vendorId, isBlocked: true }, { projection: { _id: 1 } })) {
+    throw new HttpError(409, "This menu item is not available for ordering.", "MENU_ITEM_UNAVAILABLE");
+  }
+
   const duplicate = () =>
     new HttpError(
       409,

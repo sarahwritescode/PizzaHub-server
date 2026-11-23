@@ -1,6 +1,6 @@
 import type { Filter, ObjectId, Sort } from "mongodb";
 
-import { menuItemsCollection, type MenuItemDoc } from "../models/index.js";
+import { menuItemsCollection, usersCollection, type MenuItemDoc } from "../models/index.js";
 import { buildPagination } from "../utils/pagination.js";
 import type { MenuItemsQuery } from "../validations/menu.validation.js";
 
@@ -9,7 +9,24 @@ import type { MenuItemsQuery } from "../validations/menu.validation.js";
  * The schema has no separate "active" flag: "inactive" is a status value of its
  * own, so requiring "approved" already excludes pending, rejected and inactive.
  */
-const PUBLIC_FILTER = { status: "approved" } as const;
+const PUBLIC_STATUS = "approved" as const;
+
+/**
+ * The items of a BLOCKED vendor are not public either: their orders could not be accepted or
+ * rejected (a blocked account is refused by every API), so customers must not be offered them.
+ * Nothing is deleted or changed: the items come back the moment the vendor is unblocked.
+ * The (normally empty or tiny) list of blocked vendors is read once per request.
+ */
+const publicFilter = async (): Promise<Filter<MenuItemDoc>> => {
+  // find + projection, not distinct(): the Atlas connection uses the strict Stable API, which has no distinct.
+  const blockedVendorIds = (
+    await usersCollection().find({ role: "vendor", isBlocked: true }).project<{ _id: ObjectId }>({ _id: 1 }).toArray()
+  ).map((vendor) => vendor._id);
+
+  return blockedVendorIds.length > 0
+    ? { status: PUBLIC_STATUS, vendorId: { $nin: blockedVendorIds } }
+    : { status: PUBLIC_STATUS };
+};
 
 export const FEATURED_LIMIT = 6;
 
@@ -42,8 +59,8 @@ export const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g,
 
 const caseInsensitive = (pattern: string) => ({ $regex: pattern, $options: "i" });
 
-const buildListFilter = ({ search, category, location }: MenuItemsQuery): Filter<MenuItemDoc> => {
-  const filter: Filter<MenuItemDoc> = { ...PUBLIC_FILTER };
+const buildListFilter = async ({ search, category, location }: MenuItemsQuery): Promise<Filter<MenuItemDoc>> => {
+  const filter: Filter<MenuItemDoc> = await publicFilter();
 
   // Exact match, ignoring case: ?category=chicken finds "Chicken" but not "Chicken Wings".
   if (category) filter.category = caseInsensitive(`^${escapeRegex(category)}$`);
@@ -72,7 +89,7 @@ const buildListFilter = ({ search, category, location }: MenuItemsQuery): Filter
 export const listPublicMenuItems = async (query: MenuItemsQuery) => {
   const { sortBy, order, page, limit } = query;
 
-  const filter = buildListFilter(query);
+  const filter = await buildListFilter(query);
   const direction = order === "asc" ? 1 : -1;
 
   // _id as a tie-breaker: without it, items with an equal price/createdAt can
@@ -96,17 +113,17 @@ export const listPublicMenuItems = async (query: MenuItemsQuery) => {
 };
 
 /** GET /api/menu-items/:id. Returns null for a missing OR non-public item (the caller answers 404). */
-export const findPublicMenuItem = (id: ObjectId) =>
+export const findPublicMenuItem = async (id: ObjectId) =>
   menuItemsCollection()
-    .find({ _id: id, ...PUBLIC_FILTER })
+    .find({ _id: id, ...(await publicFilter()) })
     .project<PublicMenuItem>(PUBLIC_PROJECTION)
     .limit(1)
     .next();
 
 /** GET /api/menu-items/featured. No "featured" field exists, so: the newest approved items. */
-export const listFeaturedMenuItems = () =>
+export const listFeaturedMenuItems = async () =>
   menuItemsCollection()
-    .find({ ...PUBLIC_FILTER })
+    .find(await publicFilter())
     .project<PublicMenuItem>(PUBLIC_PROJECTION)
     .sort({ createdAt: -1, _id: -1 })
     .limit(FEATURED_LIMIT)
@@ -117,10 +134,10 @@ export const listFeaturedMenuItems = () =>
  * "Chicken" and "chicken" are the same category (the first spelling in
  * alphabetical order is shown); blank categories are skipped.
  */
-export const listPublicCategories = () =>
+export const listPublicCategories = async () =>
   menuItemsCollection()
     .aggregate<CategorySummary>([
-      { $match: PUBLIC_FILTER },
+      { $match: await publicFilter() },
       { $addFields: { trimmedCategory: { $trim: { input: "$category" } } } },
       { $match: { trimmedCategory: { $ne: "" } } },
       { $sort: { trimmedCategory: 1 } },

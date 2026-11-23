@@ -546,8 +546,54 @@ try {
     check("empty menu/orders/transactions -> 200 with zeros and empty recent lists", empty.status === 200 && empty.body.data.orders.total === 0 && empty.body.data.orders.pending === 0 && empty.body.data.menuItems.total === 0 && empty.body.data.transactions.total === 0 && empty.body.data.recent.orders.length === 0 && empty.body.data.recent.transactions.length === 0, empty.body.data);
   }
 
+  // ------------------------------------------------------------ blocked vendor
+  section("11. A blocked vendor's items leave the public menu and cannot be ordered (nothing is deleted)");
+  {
+    await menuItemsCollection().deleteMany({});
+    await ordersCollection().deleteMany({});
+    const mkItem = (vendorId: Id, name: string) => ({
+      vendorId, itemName: name, category: "BlockedTest", description: "x", price: 10,
+      location: "Dhaka", images: ["https://example.com/b.jpg"], status: "approved", createdAt: new Date(),
+    });
+    const itemA = (await menuItemsCollection().insertOne(mkItem(vendorA.id, "Alpha pizza") as never)).insertedId;
+    const itemB = (await menuItemsCollection().insertOne(mkItem(vendorB.id, "Beta pizza") as never)).insertedId;
+    const order = (path: string, token: string, item: Id) =>
+      call("POST", path, token, { itemId: item.toHexString(), deliveryDate: "2099-01-01", deliveryAddress: "Somewhere" });
+
+    // An order that exists BEFORE the block must stay as it is.
+    const early = await order("/api/orders", customer.token, itemA);
+    check("before the block: both items are public and vendorA's item can be ordered (201)", early.status === 201 && (await call("GET", "/api/menu-items?category=BlockedTest", null)).body.pagination.totalItems === 2, early.body);
+
+    const blockRes = await call("PATCH", `${USERS}/${vendorA.id}/block`, admin.token);
+    check("vendorA is blocked by the admin", blockRes.status === 200 && blockRes.body.data.isBlocked === true, blockRes.body);
+
+    const list = await call("GET", "/api/menu-items?category=BlockedTest", null);
+    check("public list: only vendorB's item, totalItems 1", list.status === 200 && list.body.data.length === 1 && list.body.data[0]._id === itemB.toHexString() && list.body.pagination.totalItems === 1, list.body);
+    check("public detail of the blocked vendor's item -> 404", (await call("GET", `/api/menu-items/${itemA}`, null)).status === 404);
+    check("public detail of the other vendor's item -> 200", (await call("GET", `/api/menu-items/${itemB}`, null)).status === 200);
+    const featured = await call("GET", "/api/menu-items/featured", null);
+    check("featured: only vendorB's item", featured.body.data.length === 1 && featured.body.data[0]._id === itemB.toHexString(), featured.body);
+    const cats = await call("GET", "/api/categories", null);
+    check("categories: the count follows (BlockedTest = 1)", cats.body.data.find((c: Json) => c.name === "BlockedTest")?.count === 1, cats.body);
+
+    const refused = await order("/api/orders", alice.token, itemA);
+    check("ordering the blocked vendor's item -> 409 MENU_ITEM_UNAVAILABLE", refused.status === 409 && refused.body.code === "MENU_ITEM_UNAVAILABLE", refused.body);
+    check("...and no order was created", (await ordersCollection().countDocuments({ customerId: alice.id })) === 0);
+    check("ordering the OTHER vendor's item still works (201)", (await order("/api/orders", alice.token, itemB)).status === 201);
+
+    check("NOTHING was deleted: vendorA's item and the early order still exist, unchanged", (await menuItemsCollection().findOne({ _id: itemA }))?.status === "approved" && (await ordersCollection().findOne({ _id: new ObjectId(early.body.data._id) }))?.status === "pending");
+    const myOrders = await call("GET", "/api/orders/my-orders", customer.token);
+    check("the customer can still see and cancel the order placed before the block", myOrders.body.data.length === 1 && (await call("PATCH", `/api/orders/${early.body.data._id}/cancel`, customer.token)).status === 200);
+    check("the blocked vendor themself is refused by the vendor APIs -> 403 ACCOUNT_BLOCKED", (await call("GET", "/api/vendor/orders", vendorA.token)).body.code === "ACCOUNT_BLOCKED");
+
+    await call("PATCH", `${USERS}/${vendorA.id}/unblock`, admin.token);
+    const back = await call("GET", "/api/menu-items?category=BlockedTest", null);
+    check("after the unblock: both items are public again", back.body.pagination.totalItems === 2 && (await call("GET", `/api/menu-items/${itemA}`, null)).status === 200);
+    check("...and the item can be ordered again (201)", (await order("/api/orders", alice.token, itemA)).status === 201);
+  }
+
   // ------------------------------------------------------------ regression
-  section("10. Other APIs are unchanged");
+  section("12. Other APIs are unchanged");
   {
     check("health, public menu, categories still 200", (await call("GET", "/api/health", null)).status === 200 && (await call("GET", "/api/menu-items", null)).status === 200 && (await call("GET", "/api/categories", null)).status === 200);
     check("admin menu API still works for an admin (200) and refuses a customer (403)", (await call("GET", "/api/admin/menu-items", admin.token)).status === 200 && (await call("GET", "/api/admin/menu-items", customer.token)).status === 403);

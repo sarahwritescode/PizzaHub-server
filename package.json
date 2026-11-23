@@ -18,7 +18,8 @@
     "verify:admin": "tsx src/scripts/verifyAdminApi.ts",
     "verify:customer-orders": "tsx src/scripts/verifyCustomerOrders.ts",
     "verify:vendor-orders": "tsx src/scripts/verifyVendorOrders.ts",
-    "verify:stripe": "tsx src/scripts/verifyStripe.ts"
+    "verify:stripe": "tsx src/scripts/verifyStripe.ts",
+    "verify:jwt-expiry": "tsx src/scripts/verifyJwtExpiry.ts"
   },
   "keywords": [],
   "author": "",
