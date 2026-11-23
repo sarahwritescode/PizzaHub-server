@@ -6,6 +6,7 @@ import {
   getTransactions,
   getUserById,
   getUsers,
+  getVendors,
   unblockUser,
 } from "../controllers/admin.controller.js";
 import { requireRole } from "../middleware/auth.js";
@@ -29,6 +30,11 @@ adminUsersRouter.get("/", getUsers);
 adminUsersRouter.get("/:id", getUserById);
 adminUsersRouter.patch("/:id/block", blockUser);
 adminUsersRouter.patch("/:id/unblock", unblockUser);
+
+// GET /api/admin/vendors. Read-only list of every vendor (no pagination), for admin pickers and filters.
+export const adminVendorsRouter = Router();
+adminVendorsRouter.use(requireRole("admin"));
+adminVendorsRouter.get("/", getVendors);
 
 // GET /api/admin/transactions. Read-only on purpose: no POST/PATCH/PUT/DELETE exists for transactions.
 export const adminTransactionsRouter = Router();

@@ -79,6 +79,38 @@ export const listAdminMenuItems = async (query: AdminMenuQuery) => {
   return { items: await withVendors(items), pagination: buildPagination(page, limit, totalItems) };
 };
 
+// ───────────────────────── categories ─────────────────────────
+
+export interface AdminCategorySummary {
+  name: string;
+  count: number;
+}
+
+/**
+ * GET /api/admin/menu-items/categories. Unique categories over items of EVERY status (pending,
+ * approved, rejected, inactive) with their item count, A-Z by name. Same grouping rule as the
+ * public GET /api/categories (which only counts approved items of unblocked vendors and is
+ * unchanged): "Pizza" and "pizza" are one category, shown with the first spelling in
+ * alphabetical order; blank categories are skipped.
+ */
+export const listAdminCategories = () =>
+  menuItemsCollection()
+    .aggregate<AdminCategorySummary>([
+      { $addFields: { trimmedCategory: { $trim: { input: "$category" } } } },
+      { $match: { trimmedCategory: { $ne: "" } } },
+      { $sort: { trimmedCategory: 1 } },
+      {
+        $group: {
+          _id: { $toLower: "$trimmedCategory" },
+          name: { $first: "$trimmedCategory" },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+      { $project: { _id: 0, name: 1, count: 1 } },
+    ])
+    .toArray();
+
 // ───────────────────────── status changes ─────────────────────────
 
 /**

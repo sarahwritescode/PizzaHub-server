@@ -22,6 +22,12 @@ export const adminMenuQuerySchema = z.object({
  */
 export const emptyBodySchema = z.strictObject({});
 
+/**
+ * GET /api/admin/menu-items/categories and GET /api/admin/vendors take no query.
+ * Any key (for example `?status=approved`) is refused loudly instead of being silently ignored.
+ */
+export const emptyQuerySchema = z.strictObject({});
+
 /** PATCH /api/admin/menu-items/:id/status */
 export const updateStatusSchema = z.strictObject({
   status: z.enum(MENU_ITEM_STATUSES),

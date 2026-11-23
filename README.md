@@ -90,7 +90,7 @@ validation, `errors: [{ field, message }]`.
 | Vendor menu | `/api/vendor/menu-items` | vendor | [docs/VENDOR_MENU_TESTING.md](docs/VENDOR_MENU_TESTING.md) |
 | Image upload | `/api/vendor/upload-image` | vendor | [docs/IMAGE_UPLOAD_TESTING.md](docs/IMAGE_UPLOAD_TESTING.md) |
 | Admin menu moderation | `/api/admin/menu-items` | admin | [docs/ADMIN_MENU_TESTING.md](docs/ADMIN_MENU_TESTING.md) |
-| Admin dashboard, users, transactions | `/api/admin/dashboard`, `/api/admin/users`, `/api/admin/transactions` | admin | [docs/ADMIN_API_TESTING.md](docs/ADMIN_API_TESTING.md) |
+| Admin dashboard, users, vendors, transactions | `/api/admin/dashboard`, `/api/admin/users`, `/api/admin/vendors`, `/api/admin/transactions` | admin | [docs/ADMIN_API_TESTING.md](docs/ADMIN_API_TESTING.md) |
 | Customer orders | `/api/orders` | customer | [docs/CUSTOMER_ORDERS_TESTING.md](docs/CUSTOMER_ORDERS_TESTING.md) |
 | Vendor orders | `/api/vendor/orders` | vendor | [docs/VENDOR_ORDERS_TESTING.md](docs/VENDOR_ORDERS_TESTING.md) |
 | Premium subscription | `/api/vendor/subscription` | vendor | [docs/STRIPE_SUBSCRIPTION_TESTING.md](docs/STRIPE_SUBSCRIPTION_TESTING.md) |

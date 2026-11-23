@@ -89,6 +89,27 @@ Newest first (`createdAt` descending). Filters combine (AND). The total and the 
 
 Errors: 400 `VALIDATION_ERROR` (bad `status`, `page=0`, `limit=51`, a repeated key, ...), 401, 403.
 
+### A2. List categories
+
+`GET /api/admin/menu-items/categories`: the distinct categories over items of **every** status (pending, approved,
+rejected, inactive), with how many items each has. No query and no body: any query parameter is a 400
+`VALIDATION_ERROR`. Read-only.
+
+```json
+// 200
+{ "success": true, "message": "Categories fetched successfully",
+  "data": [ { "name": "Burgers", "count": 1 }, { "name": "Classic Pizzas", "count": 5 } ] }
+```
+
+* Sorted A-Z by `name`.
+* Grouping ignores case and surrounding spaces: `Pizza`, `pizza` and `PIZZA` are one category. The name shown is the
+  first spelling in alphabetical order (the same rule as the public list); blank categories are skipped.
+* This is the admin view. The public `GET /api/categories` is unchanged and counts only approved items of unblocked
+  vendors.
+* The route is declared next to `GET /` (there is no `GET /:id`, so there is no clash).
+
+Errors: 400 (any query parameter), 401, 403.
+
 ## B. Approve
 
 `PATCH /api/admin/menu-items/:id/approve`, no body (`{}` is fine).

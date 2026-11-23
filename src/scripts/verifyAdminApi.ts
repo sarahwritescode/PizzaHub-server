@@ -107,6 +107,8 @@ const seedTransaction = async (
 const USERS = "/api/admin/users";
 const TX = "/api/admin/transactions";
 const DASH = "/api/admin/dashboard";
+const ADMIN_CATEGORIES = "/api/admin/menu-items/categories";
+const VENDORS = "/api/admin/vendors";
 
 const SAFE_USER_FIELDS = "_id,businessName,createdAt,email,image,isBlocked,name,role,subscriptionExpiresAt,subscriptionPlan";
 const keysOf = (o: Json) => Object.keys(o).sort().join(",");
@@ -181,6 +183,8 @@ try {
       ["PATCH", `${USERS}/${fakeId}/block`],
       ["PATCH", `${USERS}/${fakeId}/unblock`],
       ["GET", TX],
+      ["GET", ADMIN_CATEGORIES],
+      ["GET", VENDORS],
     ];
 
     for (const [method, path] of probes) {
@@ -601,6 +605,80 @@ try {
     check("customer orders still refuse an admin -> 403, vendor orders too", (await call("GET", "/api/orders/my-orders", admin.token)).status === 403 && (await call("GET", "/api/vendor/orders", admin.token)).status === 403);
     check("an unknown /api/admin path is a plain 404 JSON, also anonymously", (await call("GET", "/api/admin/nope", null)).status === 404);
     check("an unblocked user works on their own APIs again", (await call("GET", "/api/orders/my-orders", customer.token)).status === 200);
+  }
+
+  // ------------------------------------------------------------ admin categories
+  section("13. GET /api/admin/menu-items/categories: every status, case-insensitive, A-Z");
+  {
+    await menuItemsCollection().deleteMany({});
+
+    const empty = await call("GET", ADMIN_CATEGORIES, admin.token);
+    check("no menu items -> 200 with an empty list", empty.status === 200 && empty.body.success === true && Array.isArray(empty.body.data) && empty.body.data.length === 0, empty.body);
+
+    const mk = (category: string, status: string, vendorId: Id, n: number) => ({
+      vendorId, itemName: `Cat ${category.trim()} ${status} ${n}`, category, description: "x", price: 10,
+      location: "Dhaka", images: ["https://example.com/c.jpg"], status, createdAt: new Date(),
+    });
+    await menuItemsCollection().insertMany([
+      mk("Pizza", "approved", vendorA.id, 1),
+      mk("pizza", "pending", vendorA.id, 2),
+      mk("PIZZA", "rejected", vendorB.id, 3),
+      mk("Classic Pizzas", "rejected", vendorA.id, 4),
+      mk("Classic Pizzas", "inactive", vendorB.id, 5),
+      mk("  Burgers ", "pending", vendorB.id, 6),
+    ] as never);
+
+    const res = await call("GET", ADMIN_CATEGORIES, admin.token);
+    check("-> 200 { success, message, data }", res.status === 200 && res.body.success === true && res.body.message === "Categories fetched successfully" && Array.isArray(res.body.data) && !("pagination" in res.body), res.body);
+    check("A-Z by name, \"Pizza\" / \"pizza\" / \"PIZZA\" are one category (first spelling), a blank-padded name is trimmed", JSON.stringify(res.body.data) === JSON.stringify([{ name: "Burgers", count: 1 }, { name: "Classic Pizzas", count: 2 }, { name: "PIZZA", count: 3 }]), res.body.data);
+    check("every entry has exactly name and count", res.body.data.every((c: Json) => Object.keys(c).sort().join() === "count,name"));
+
+    const pub = await call("GET", "/api/categories", null);
+    check("the public /api/categories is unchanged: approved items only (just Pizza = 1)", pub.status === 200 && JSON.stringify(pub.body.data) === JSON.stringify([{ name: "Pizza", count: 1 }]), pub.body.data);
+
+    const withQuery = await call("GET", `${ADMIN_CATEGORIES}?status=approved`, admin.token);
+    check("a query parameter is refused -> 400 VALIDATION_ERROR", withQuery.status === 400 && withQuery.body.code === "VALIDATION_ERROR" && withQuery.body.success === false, withQuery.body);
+    for (const method of ["POST", "PATCH", "PUT", "DELETE"]) {
+      const r = await call(method, ADMIN_CATEGORIES, admin.token, method === "DELETE" ? undefined : {});
+      check(`${method} on the categories path is not a route -> 4xx, categories unchanged`, r.status >= 400 && r.status < 500, [r.status, r.body]);
+    }
+    check("...the categories are unchanged after those attempts", JSON.stringify((await call("GET", ADMIN_CATEGORIES, admin.token)).body.data) === JSON.stringify(res.body.data));
+    check("NO password / token / secret anywhere", leaks(res.body).length === 0, leaks(res.body));
+    await menuItemsCollection().deleteMany({});
+  }
+
+  // ------------------------------------------------------------ admin vendors
+  section("14. GET /api/admin/vendors: every vendor, safe fields only, A-Z by name");
+  {
+    // A lower-case name and a vendor without businessName: the sort must ignore case, the field must be null.
+    const lower = await usersCollection().insertOne({
+      name: "aardvark Pizza", email: `aardvark.${runId}@pizzahub.test`, role: "vendor", isBlocked: true,
+      subscriptionPlan: "premium", subscriptionExpiresAt: new Date(Date.now() + 86_400_000),
+      stripeCustomerId: "cus_SECRET_aardvark", createdAt: new Date(),
+    } as never);
+
+    const res = await call("GET", VENDORS, admin.token);
+    check("-> 200 { success, message, data } without pagination", res.status === 200 && res.body.success === true && res.body.message === "Vendors fetched successfully" && Array.isArray(res.body.data) && !("pagination" in res.body), res.body);
+    check("exactly the 3 vendors (blocked ones included), no customers or admins", res.body.data.length === 3, res.body.data);
+    check("each item has exactly _id, name, email, businessName", res.body.data.every((v: Json) => keysOf(v) === "_id,businessName,email,name"), res.body.data[0] && keysOf(res.body.data[0]));
+    check("sorted A-Z by name ignoring case: aardvark, Vendor Alpha, Vendor Beta", res.body.data.map((v: Json) => v.name).join("|") === "aardvark Pizza|Vendor Alpha|Vendor Beta", res.body.data.map((v: Json) => v.name));
+    const a = res.body.data.find((v: Json) => v._id === vendorA.id.toHexString());
+    check("values come through: businessName set for vendorA, null when missing", a?.email === vendorA.email && a?.businessName === "Alpha Kitchen" && res.body.data[0].businessName === null, res.body.data);
+    check("NO password / token / secret / subscription / Stripe id anywhere (vendorB and the extra vendor hold such values)", leaks(res.body).length === 0 && !JSON.stringify(res.body).includes("subscription") && !JSON.stringify(res.body).includes("stripe"), leaks(res.body));
+
+    const withQuery = await call("GET", `${VENDORS}?search=alpha`, admin.token);
+    check("a query parameter is refused -> 400 VALIDATION_ERROR", withQuery.status === 400 && withQuery.body.code === "VALIDATION_ERROR", withQuery.body);
+
+    const snapshot = JSON.stringify(await usersCollection().find({}).sort({ _id: 1 }).toArray());
+    for (const [method, path] of [["POST", VENDORS], ["PATCH", VENDORS], ["PUT", VENDORS], ["DELETE", VENDORS], ["GET", `${VENDORS}/${vendorA.id}`]] as const) {
+      const r = await call(method, path, admin.token, method === "GET" || method === "DELETE" ? undefined : { name: "x" });
+      check(`${method} ${path.replace(/[0-9a-f]{24}/, ":id")} as admin -> 404 (read-only, no such route)`, r.status === 404 && r.body.success === false, [r.status, r.body]);
+    }
+    check("the users collection is byte-for-byte unchanged", JSON.stringify(await usersCollection().find({}).sort({ _id: 1 }).toArray()) === snapshot);
+
+    await usersCollection().deleteOne({ _id: lower.insertedId });
+    const after = await call("GET", VENDORS, admin.token);
+    check("the list follows the data: 2 vendors again", after.body.data.length === 2);
   }
 } catch (error) {
   failures.push("script crashed");

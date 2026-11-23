@@ -5,6 +5,7 @@ import { parseWith } from "../utils/validate.js";
 import {
   adminMenuQuerySchema,
   emptyBodySchema,
+  emptyQuerySchema,
   updateStatusSchema,
 } from "../validations/adminMenu.validation.js";
 import { menuItemParamsSchema } from "../validations/menu.validation.js";
@@ -24,7 +25,17 @@ export const getAllMenuItems = async (req: Request, res: Response) => {
   });
 };
 
-export const approveMenuItem = async (req: Request, res: Response) => {
+export const getAdminCategories = async (req: Request, res: Response) => {
+  parseWith(emptyQuerySchema, req.query);
+
+  res.status(200).json({
+    success: true,
+    message: "Categories fetched successfully",
+    data: await adminMenu.listAdminCategories(),
+  });
+};
+
+export const approveMenuItem =async (req: Request, res: Response) => {
   const { id } = parseWith(menuItemParamsSchema, req.params);
   parseWith(emptyBodySchema, req.body ?? {});
   const item = await adminMenu.changeMenuItemStatus(id, "approved");

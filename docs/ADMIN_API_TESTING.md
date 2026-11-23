@@ -11,6 +11,8 @@ API (Task 06) is documented in [ADMIN_MENU_TESTING.md](ADMIN_MENU_TESTING.md) an
 | `PATCH /api/admin/users/:id/block` | Block a user |
 | `PATCH /api/admin/users/:id/unblock` | Unblock a user |
 | `GET /api/admin/transactions` | Paginated, read-only. Query: `status`, `vendorId`, `page`, `limit` |
+| `GET /api/admin/vendors` | Every vendor, no pagination, no query (see "Vendors" below) |
+| `GET /api/admin/menu-items/categories` | Distinct categories over all statuses with counts (documented in [ADMIN_MENU_TESTING.md](ADMIN_MENU_TESTING.md), section A2) |
 
 Every endpoint needs `Authorization: Bearer <admin JWT>` (`GET /api/auth/token` after signing in; the Better Auth session
 cookie also works from the browser). Nothing new was added to authentication: all three routers use the existing
@@ -134,6 +136,24 @@ What a block does:
 * `vendor` has only `_id, name, email` (+ `businessName` if set). It is `null` when the vendor's account no longer exists.
 * The amount is in major units (9.99, not 999 cents), as stored by the Stripe webhook.
 
+## Vendors
+
+`GET /api/admin/vendors` (its own router, mounted at `/api/admin/vendors`, behind `requireRole("admin")`): a plain list
+for admin dropdowns and filters.
+
+```json
+// 200
+{ "success": true, "message": "Vendors fetched successfully",
+  "data": [ { "_id": "674a0000000000000000aaaa", "name": "Alpha Pizza", "email": "alpha@example.com", "businessName": "Alpha Kitchen" } ] }
+```
+
+* Every user with `role: "vendor"`, **blocked vendors included**; no pagination (no `pagination` key in the response).
+* Sorted A-Z by `name`, ignoring case (`aardvark` comes before `Bob`); `_id` breaks ties.
+* `businessName` is `null` when the vendor has none.
+* Same allow-list projection idea as the user endpoints: only `_id, name, email, businessName` are read from the
+  database. No password (it lives in Better Auth's `account` collection), session, token, subscription field or Stripe id.
+* No query and no body: any query parameter is a 400 `VALIDATION_ERROR`. POST, PUT, PATCH, DELETE and `GET /:id` are 404.
+
 ## Automated test
 
 ```
@@ -141,9 +161,9 @@ npm run verify:admin
 ```
 
 Real sign-up, real Better Auth JWTs, real HTTP, in a throwaway MongoDB database (`pizzahub_admin_verify_<time>`, dropped
-at the end; your data is never touched). 171 checks, including:
+at the end; your data is never touched). 207 checks, including:
 
-1. every endpoint: anonymous 401, customer 403, vendor 403, blocked admin 403, bad token 401, cookie CSRF guard
+1. every endpoint (also `GET /api/admin/menu-items/categories` and `GET /api/admin/vendors`): anonymous 401, customer 403, vendor 403, blocked admin 403, bad token 401, cookie CSRF guard
 2. user list: safe fields only, newest first, 3-page pagination, search by name and email (and `.*` is not a regex),
    role and blocked filters, combined filters, a user without `isBlocked`
 3. ten invalid query values, all `400 VALIDATION_ERROR`
@@ -156,6 +176,10 @@ at the end; your data is never touched). 171 checks, including:
 9. dashboard counts match the database, expired/non-vendor Premium not counted, numbers update live, empty database gives zeros
 10. (section 11 of the script) a blocked vendor's items leave the public menu and cannot be ordered, nothing is deleted, they return on unblock
 11. (section 12 of the script) health, public menu, admin menu, vendor, order APIs unchanged
+12. (section 13) admin categories: empty list, all statuses counted, `Pizza`/`pizza`/`PIZZA` merged, padded names trimmed,
+    A-Z, public `/api/categories` unchanged, query refused, no write routes
+13. (section 14) admin vendors: blocked vendors included, exact safe fields, case-insensitive A-Z, `businessName` null,
+    no subscription / Stripe / secret text anywhere, query refused, no write routes, users collection unchanged
 
 ## Manual check (Postman / curl)
 
@@ -166,6 +190,8 @@ GET  {{baseUrl}}/api/admin/users/<userId>
 PATCH {{baseUrl}}/api/admin/users/<userId>/block
 PATCH {{baseUrl}}/api/admin/users/<userId>/unblock
 GET  {{baseUrl}}/api/admin/transactions?status=success&vendorId=<vendorId>
+GET  {{baseUrl}}/api/admin/vendors
+GET  {{baseUrl}}/api/admin/menu-items/categories
 ```
 
 After blocking, call any protected API with the blocked user's old token: it must return `403 ACCOUNT_BLOCKED`.

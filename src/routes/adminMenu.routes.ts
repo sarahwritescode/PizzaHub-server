@@ -4,6 +4,7 @@ import { requireRole } from "../middleware/auth.js";
 import {
   approveMenuItem,
   deleteMenuItem,
+  getAdminCategories,
   getAllMenuItems,
   rejectMenuItem,
   updateMenuItemStatus,
@@ -20,6 +21,7 @@ const router = Router();
 router.use(requireRole("admin"));
 
 router.get("/", getAllMenuItems);
+router.get("/categories", getAdminCategories);
 router.patch("/:id/approve", approveMenuItem);
 router.patch("/:id/reject", rejectMenuItem);
 router.patch("/:id/status", updateMenuItemStatus);
