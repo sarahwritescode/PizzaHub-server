@@ -15,6 +15,7 @@
     "verify:upload": "tsx src/scripts/verifyUploadApi.ts",
     "verify:origins": "tsx src/scripts/verifyOrigins.ts",
     "verify:admin-menu": "tsx src/scripts/verifyAdminMenuApi.ts",
+    "verify:admin": "tsx src/scripts/verifyAdminApi.ts",
     "verify:customer-orders": "tsx src/scripts/verifyCustomerOrders.ts",
     "verify:vendor-orders": "tsx src/scripts/verifyVendorOrders.ts",
     "verify:stripe": "tsx src/scripts/verifyStripe.ts"

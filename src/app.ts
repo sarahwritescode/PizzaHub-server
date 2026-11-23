@@ -20,6 +20,7 @@ import adminMenuRouter from "./routes/adminMenu.routes.js";
 import orderRouter from "./routes/order.routes.js";
 import vendorOrderRouter from "./routes/vendorOrder.routes.js";
 import subscriptionRouter from "./routes/subscription.routes.js";
+import { adminDashboardRouter, adminTransactionsRouter, adminUsersRouter } from "./routes/admin.routes.js";
 import { stripeWebhook } from "./controllers/stripeWebhook.controller.js";
 import notFound from "./middleware/notFound.js";
 import errorHandler from "./middleware/errorHandler.js";
@@ -85,6 +86,11 @@ app.use("/api/vendor/upload-image", uploadRouter);
 
 // Admin menu approval / rejection / moderation (admin login required)
 app.use("/api/admin/menu-items", adminMenuRouter);
+
+// Admin dashboard statistics, user management (block/unblock) and read-only transactions (admin login required)
+app.use("/api/admin/dashboard", adminDashboardRouter);
+app.use("/api/admin/users", adminUsersRouter);
+app.use("/api/admin/transactions", adminTransactionsRouter);
 
 // Customer orders (customer login required)
 app.use("/api/orders", orderRouter);
